@@ -1,0 +1,9 @@
+{
+  "name": "STYN - Social, Dating & Entertainment",
+  "description": "A hybrid social media platform combining networking, dating, short reels, and real-time messaging with a gamified reward system.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
