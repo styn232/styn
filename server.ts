@@ -142,11 +142,22 @@ db.exec(`
     success_score INTEGER DEFAULT 0, -- 0 to 100, based on chat length/engagement
     FOREIGN KEY(match_id) REFERENCES matches(id)
   );
+
+  CREATE TABLE IF NOT EXISTS news (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    content TEXT,
+    source TEXT,
+    image_url TEXT,
+    location TEXT, -- 'South Africa', 'Zimbabwe'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // --- SEED DATA ---
 const seedData = () => {
   const superAdmin = db.prepare('SELECT * FROM users WHERE email = ?').get('styn@styni.com');
+  let adminId: number | bigint = 0;
   if (!superAdmin) {
     const info = db.prepare(`
       INSERT INTO users (username, email, password, is_super_admin, bio, avatar_url, interests) 
@@ -160,45 +171,70 @@ const seedData = () => {
       'https://picsum.photos/seed/admin/200/200',
       'Technology, Management, Innovation'
     );
-    const adminId = info.lastInsertRowid;
-
-    // Add some reels for Super Admin
-    db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
-      adminId,
-      'Welcome to the future of STYN! 🚀',
-      'https://picsum.photos/seed/reel_admin1/1080/1920',
-      'reel'
-    );
-    db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
-      adminId,
-      'Our mission is to connect the world through creativity.',
-      'https://picsum.photos/seed/reel_admin2/1080/1920',
-      'reel'
-    );
+    adminId = info.lastInsertRowid;
+  } else {
+    adminId = superAdmin.id;
   }
 
-  // Seed 5 Dating Profiles
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  if (userCount < 6) {
-    const datingProfiles = [
-      ['Sarah J.', 'sarah@example.com', 'Art, Travel, Photography', 'Adventure seeker and coffee lover.'],
-      ['Mike Ross', 'mike@example.com', 'Gaming, Tech, Music', 'Building the future, one line at a time.'],
-      ['Elena V.', 'elena@example.com', 'Yoga, Fitness, Healthy Food', 'Finding balance in a chaotic world.'],
-      ['David K.', 'david@example.com', 'Cooking, Wine, Movies', 'Foodie at heart, looking for a dinner partner.'],
-      ['Sophia L.', 'sophia@example.com', 'Books, Writing, Nature', 'Lost in a good book or a deep forest.']
+  // Add some reels for Super Admin
+  const reelCount = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "reel"').get().count;
+  if (reelCount < 5) {
+    const sampleReels = [
+      ['Vibrant Cape Town Streets 🇿🇦', 'https://picsum.photos/seed/sa_reel1/1080/1920'],
+      ['Sunset at Victoria Falls 🇿🇼', 'https://picsum.photos/seed/zim_reel1/1080/1920'],
+      ['Johannesburg Nightlife Vibes', 'https://picsum.photos/seed/sa_reel2/1080/1920'],
+      ['Traditional Dance in Harare', 'https://picsum.photos/seed/zim_reel2/1080/1920'],
+      ['Wildlife Safari Highlights', 'https://picsum.photos/seed/sa_reel3/1080/1920']
+    ];
+    sampleReels.forEach(([content, url]) => {
+      db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
+        adminId, content, url, 'reel'
+      );
+    });
+  }
+
+  // Seed 10 South African Profiles
+  const saProfilesCount = db.prepare('SELECT COUNT(*) as count FROM users WHERE location LIKE "%South Africa%"').get().count;
+  if (saProfilesCount < 10) {
+    const saGirls = [
+      ['Zanele M.', 'zanele@styn.sa', 'Cape Town, South Africa', 'Fashion, Design, Music'],
+      ['Lerato K.', 'lerato@styn.sa', 'Johannesburg, South Africa', 'Tech, Entrepreneurship, Travel'],
+      ['Nomvula S.', 'nomvula@styn.sa', 'Durban, South Africa', 'Surfing, Yoga, Nature'],
+      ['Thandiwe B.', 'thandi@styn.sa', 'Pretoria, South Africa', 'Politics, Law, Reading'],
+      ['Buhle X.', 'buhle@styn.sa', 'Soweto, South Africa', 'Dance, Community, Art'],
+      ['Aphiwe N.', 'aphiwe@styn.sa', 'Port Elizabeth, South Africa', 'Marine Biology, Photography'],
+      ['Mbali R.', 'mbali@styn.sa', 'Bloemfontein, South Africa', 'Agriculture, Cooking, Family'],
+      ['Nandi G.', 'nandi@styn.sa', 'East London, South Africa', 'Poetry, Jazz, History'],
+      ['Siphesihle W.', 'siphe@styn.sa', 'Mbombela, South Africa', 'Wildlife, Conservation, Hiking'],
+      ['Khanyisile T.', 'khanyi@styn.sa', 'Polokwane, South Africa', 'Education, Sports, Fitness']
     ];
 
-    datingProfiles.forEach(([username, email, interests, bio]) => {
+    saGirls.forEach(([name, email, loc, interests]) => {
       db.prepare(`
-        INSERT INTO users (username, email, password, interests, bio, avatar_url) 
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, email, password, location, interests, bio, avatar_url, gender, age) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        username, 
-        email, 
-        'password123', 
-        interests, 
-        bio, 
-        `https://picsum.photos/seed/${username.replace(' ', '')}/200/200`
+        name, email, 'password123', loc, interests, 
+        `Proudly South African 🇿🇦. Interested in ${interests}.`,
+        `https://picsum.photos/seed/${name.replace(' ', '')}/400/400`,
+        'Female', Math.floor(Math.random() * 10) + 20
+      );
+    });
+  }
+
+  // Seed News
+  const newsCount = db.prepare('SELECT COUNT(*) as count FROM news').get().count;
+  if (newsCount === 0) {
+    const newsItems = [
+      ['SA Tech Hub Growth', 'South Africa continues to lead the continent in tech innovation hubs.', 'STYN News', 'https://picsum.photos/seed/news1/800/400', 'South Africa'],
+      ['Zim Tourism Boost', 'Victoria Falls sees record numbers of international visitors this season.', 'Zim Daily', 'https://picsum.photos/seed/news2/800/400', 'Zimbabwe'],
+      ['Renewable Energy in SA', 'New solar farm projects launched in Northern Cape.', 'Green SA', 'https://picsum.photos/seed/news3/800/400', 'South Africa'],
+      ['Harare Art Festival', 'Local artists showcase vibrant culture at the annual Harare festival.', 'Harare Times', 'https://picsum.photos/seed/news4/800/400', 'Zimbabwe'],
+      ['SA Economic Outlook', 'Experts predict steady growth for the South African economy in 2026.', 'Finance SA', 'https://picsum.photos/seed/news5/800/400', 'South Africa']
+    ];
+    newsItems.forEach(([title, content, source, img, loc]) => {
+      db.prepare('INSERT INTO news (title, content, source, image_url, location) VALUES (?, ?, ?, ?, ?)').run(
+        title, content, source, img, loc
       );
     });
   }
@@ -279,15 +315,59 @@ async function startServer() {
 
   // Posts & Reels
   app.get('/api/posts', (req, res) => {
-    const type = req.query.type || 'post';
-    const posts = db.prepare(`
+    const type = req.query.type;
+    let query = `
       SELECT posts.*, users.username, users.avatar_url 
       FROM posts 
       JOIN users ON posts.user_id = users.id 
-      WHERE posts.type = ? 
-      ORDER BY posts.created_at DESC
-    `).all(type);
-    res.json(posts);
+    `;
+    if (type) {
+      query += ` WHERE posts.type = ?`;
+    }
+    query += ` ORDER BY posts.created_at DESC`;
+    
+    const posts = type ? db.prepare(query).all(type) : db.prepare(query).all();
+    
+    // Add comments and like status for each post
+    const postsWithDetails = posts.map(post => {
+      const comments = db.prepare('SELECT comments.*, users.username, users.avatar_url FROM comments JOIN users ON comments.user_id = users.id WHERE post_id = ? ORDER BY created_at ASC').all(post.id);
+      const likes = db.prepare('SELECT COUNT(*) as count FROM likes WHERE post_id = ?').get(post.id).count;
+      return { ...post, comments, likes_count: likes };
+    });
+    
+    res.json(postsWithDetails);
+  });
+
+  app.post('/api/posts/like', (req, res) => {
+    const { user_id, post_id } = req.body;
+    try {
+      const existing = db.prepare('SELECT * FROM likes WHERE user_id = ? AND post_id = ?').get(user_id, post_id);
+      if (existing) {
+        db.prepare('DELETE FROM likes WHERE user_id = ? AND post_id = ?').run(user_id, post_id);
+        res.json({ liked: false });
+      } else {
+        db.prepare('INSERT INTO likes (user_id, post_id) VALUES (?, ?)').run(user_id, post_id);
+        res.json({ liked: true });
+      }
+    } catch (err) {
+      res.status(400).json({ error: 'Action failed' });
+    }
+  });
+
+  app.post('/api/posts/comment', (req, res) => {
+    const { user_id, post_id, content } = req.body;
+    try {
+      db.prepare('INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)').run(user_id, post_id, content);
+      const newComment = db.prepare('SELECT comments.*, users.username, users.avatar_url FROM comments JOIN users ON comments.user_id = users.id WHERE comments.id = last_insert_rowid()').get();
+      res.json(newComment);
+    } catch (err) {
+      res.status(400).json({ error: 'Comment failed' });
+    }
+  });
+
+  app.get('/api/news', (req, res) => {
+    const news = db.prepare('SELECT * FROM news ORDER BY created_at DESC').all();
+    res.json(news);
   });
 
   app.post('/api/posts', (req, res) => {

@@ -22,7 +22,9 @@ import {
   Share2,
   Send,
   Menu,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
@@ -111,16 +113,27 @@ const Navbar = ({ currentView, setView, user, onLogout }: { currentView: View, s
 
         <div className="flex items-center gap-2">
           {user ? (
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-2 md:gap-4">
               <div className="text-right hidden sm:block">
                 <p className="text-[10px] text-brand font-mono uppercase tracking-widest">{user.level}</p>
+                <p className="text-[10px] text-white/40 font-bold">{user.points} PTS</p>
               </div>
               <button 
                 onClick={() => handleNav('profile')}
-                className="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-orange-600 border border-white/20 overflow-hidden flex items-center justify-center"
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-orange-600 border border-white/20 overflow-hidden flex items-center justify-center hover:scale-105 transition-all"
               >
                 {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" /> : <User size={18} className="text-white" />}
               </button>
+              
+              {/* Desktop Logout */}
+              <button 
+                onClick={onLogout}
+                className="hidden lg:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-red-500/20 hover:text-red-400 transition-all"
+              >
+                <LogOut size={14} />
+                Logout
+              </button>
+
               <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="lg:hidden p-2 text-white/70 hover:text-white"
@@ -256,7 +269,7 @@ export default function App() {
       case 'blockbuster':
         return <BlockbusterView />;
       case 'admin':
-        return <AdminView />;
+        return <AdminView setView={setView} />;
       case 'profile':
         return <ProfileView user={user} />;
       case 'auth':
@@ -374,13 +387,20 @@ const AdBanner = () => {
 
 // --- Sub-Views ---
 
-const AdminView = () => {
+const AdminView = ({ setView }: { setView: (v: View) => void }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <header className="mb-12 flex justify-between items-end">
+      <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h2 className="text-5xl font-black tracking-tighter">ADMIN PANEL</h2>
-          <p className="text-white/40">Platform overview and management dashboard.</p>
+          <button 
+            onClick={() => setView('home')}
+            className="flex items-center gap-2 text-brand font-black uppercase tracking-widest text-[10px] mb-4 hover:translate-x-[-4px] transition-transform"
+          >
+            <ChevronLeft size={14} />
+            Back to Feed
+          </button>
+          <h2 className="text-4xl md:text-5xl font-black tracking-tighter">ADMIN PANEL</h2>
+          <p className="text-white/40 text-sm">Platform oversight and management dashboard.</p>
         </div>
         <div className="flex gap-4">
           <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-center">
@@ -452,57 +472,146 @@ const AdminView = () => {
 };
 
 const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserData | null }) => {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [news, setNews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [postsRes, newsRes] = await Promise.all([
+          fetch('/api/posts'),
+          fetch('/api/news')
+        ]);
+        const postsData = await postsRes.json();
+        const newsData = await newsRes.json();
+        setPosts(postsData);
+        setNews(newsData);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleLike = async (postId: number) => {
+    if (!user) return alert('Please login to like posts');
+    const res = await fetch('/api/posts/like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.id, post_id: postId })
+    });
+    const data = await res.json();
+    setPosts(posts.map(p => {
+      if (p.id === postId) {
+        return { ...p, likes_count: data.liked ? p.likes_count + 1 : p.likes_count - 1 };
+      }
+      return p;
+    }));
+  };
+
+  const handleComment = async (postId: number, content: string) => {
+    if (!user) return alert('Please login to comment');
+    if (!content.trim()) return;
+    const res = await fetch('/api/posts/comment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.id, post_id: postId, content })
+    });
+    const newComment = await res.json();
+    setPosts(posts.map(p => {
+      if (p.id === postId) {
+        return { ...p, comments: [...(p.comments || []), newComment] };
+      }
+      return p;
+    }));
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Feed */}
         <div className="lg:col-span-8 space-y-6 md:space-y-8">
           <AdBanner />
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden group">
+          
+          {loading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : posts.map(post => (
+            <div key={post.id} className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden group transition-all hover:border-white/20">
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand to-orange-400" />
+                  <img src={post.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-10 h-10 rounded-full object-cover border border-white/10" />
                   <div>
-                    <p className="text-sm font-bold">creator_name_{i}</p>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest">2 hours ago</p>
+                    <p className="font-bold text-sm">@{post.username}</p>
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
+                      {new Date(post.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
-                <button className="text-white/30 hover:text-white"><MoreVertical size={20} /></button>
+                <button className="text-white/20 hover:text-white"><Settings size={18} /></button>
               </div>
-              <div className="aspect-video bg-black relative overflow-hidden">
-                <img 
-                  src={`https://picsum.photos/seed/styn${i}/1200/800`} 
-                  alt="" 
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="p-6">
-                <p className="text-base md:text-lg font-medium mb-4">Exploring the new STYN interface. The Peach Orange theme is just incredible! 🍑 #styn #social #future</p>
-                <div className="flex items-center gap-6">
+              
+              <div className="px-4 pb-4">
+                <p className="text-sm mb-4 leading-relaxed">{post.content}</p>
+                {post.media_url && (
+                  <div className="rounded-2xl overflow-hidden bg-black/20 border border-white/5 aspect-video mb-4">
+                    <img 
+                      src={post.media_url} 
+                      alt="" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-6 pt-2 border-t border-white/5">
                   <button 
-                    onClick={() => {
-                      if (user) {
-                        fetch('/api/activity', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ user_id: user.id, activity_type: 'like', target_id: i })
-                        });
-                      }
-                    }}
-                    className="flex items-center gap-2 text-white/50 hover:text-brand transition-colors"
+                    onClick={() => handleLike(post.id)}
+                    className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-brand transition-colors"
                   >
-                    <ThumbsUp size={20} />
-                    <span className="text-sm font-bold">1.2k</span>
+                    <Heart size={18} className={post.liked ? "fill-brand text-brand" : ""} />
+                    {post.likes_count || 0}
                   </button>
-                  <button className="flex items-center gap-2 text-white/50 hover:text-brand transition-colors">
-                    <MessageSquare size={20} />
-                    <span className="text-sm font-bold">84</span>
+                  <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-emerald-400 transition-colors">
+                    <MessageSquare size={18} />
+                    {post.comments?.length || 0}
                   </button>
-                  <button className="flex items-center gap-2 text-white/50 hover:text-white transition-colors ml-auto">
-                    <Share2 size={20} />
+                  <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-indigo-400 transition-colors">
+                    <Share2 size={18} />
+                    Share
                   </button>
+                </div>
+
+                {/* Comments Section */}
+                <div className="mt-4 space-y-3">
+                  {post.comments?.map((comment: any) => (
+                    <div key={comment.id} className="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
+                      <img src={comment.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                      <div>
+                        <p className="text-[10px] font-bold text-brand">@{comment.username}</p>
+                        <p className="text-xs text-white/80">{comment.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {user && (
+                    <div className="flex gap-2 mt-4">
+                      <input 
+                        type="text" 
+                        placeholder="Write a comment..."
+                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-white/30"
+                        onKeyPress={(e: any) => {
+                          if (e.key === 'Enter') {
+                            handleComment(post.id, e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -511,50 +620,41 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
 
         {/* Sidebar */}
         <div className="lg:col-span-4 space-y-8">
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6">
-            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/30 mb-6">Recommended Profiles</h3>
-            <div className="space-y-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/10" />
-                    <div>
-                      <p className="text-sm font-bold">user_handle_{i}</p>
-                      <p className="text-[10px] text-brand">98% Match</p>
-                    </div>
+          {/* Latest News Section */}
+          <section className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+            <h3 className="text-xl font-black tracking-tighter mb-6 flex items-center gap-2">
+              <Play size={20} className="text-brand fill-brand" />
+              LATEST NEWS
+            </h3>
+            <div className="space-y-6">
+              {news.map(item => (
+                <div key={item.id} className="group cursor-pointer">
+                  <div className="aspect-video rounded-2xl overflow-hidden mb-3 border border-white/10">
+                    <img src={item.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                   </div>
-                  <button 
-                    onClick={async () => {
-                      if (user) {
-                        await fetch('/api/follow', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ follower_id: user.id, following_id: i }) // i is mock user id here
-                        });
-                        alert('Follow status updated!');
-                      }
-                    }}
-                    className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20 hover:bg-brand hover:text-black transition-all"
-                  >
-                    Follow
-                  </button>
+                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-brand mb-1 block">{item.location} • {item.source}</span>
+                  <h4 className="text-sm font-bold leading-tight group-hover:text-brand transition-colors">{item.title}</h4>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="bg-gradient-to-br from-brand to-orange-600 rounded-3xl p-6 relative overflow-hidden group cursor-pointer" onClick={() => setView('reels')}>
-            <div className="relative z-10">
-              <h3 className="text-2xl font-black tracking-tighter mb-2 text-black">WATCH REELS</h3>
-              <p className="text-sm text-black/70 mb-4">Endless entertainment at your fingertips.</p>
-              <div className="flex -space-x-2">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="w-8 h-8 rounded-full border-2 border-brand bg-black/20" />
-                ))}
-                <div className="w-8 h-8 rounded-full border-2 border-brand bg-black/10 flex items-center justify-center text-[10px] font-bold text-black">+12k</div>
-              </div>
+          <section className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+            <h3 className="text-xl font-black tracking-tighter mb-6">SUGGESTED FRIENDS</h3>
+            <div className="space-y-6">
+              {posts.slice(0, 4).map((p, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img src={p.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                    <div>
+                      <p className="text-sm font-bold">@{p.username}</p>
+                      <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Suggested for you</p>
+                    </div>
+                  </div>
+                  <button className="text-[10px] font-black uppercase tracking-widest text-brand hover:text-white transition-colors">Follow</button>
+                </div>
+              ))}
             </div>
-            <Play className="absolute -bottom-4 -right-4 w-32 h-32 text-black/10 group-hover:scale-110 transition-transform" />
           </section>
         </div>
       </div>
@@ -698,12 +798,16 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
 const ReelsView = () => {
   const [showUpload, setShowUpload] = useState(false);
   const [reelContent, setReelContent] = useState('');
-  const [reelMedia, setReelMedia] = useState('');
+  const [reelMedia, setReelMedia] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [reels, setReels] = useState<any[]>([]);
   const [currentReelIndex, setCurrentReelIndex] = useState(0);
+  const [user, setUser] = useState<UserData | null>(null);
 
   useEffect(() => {
+    const savedUser = localStorage.getItem('styn_user');
+    if (savedUser) setUser(JSON.parse(savedUser));
+    
     fetch('/api/posts?type=reel')
       .then(res => res.json())
       .then(data => setReels(data));
@@ -712,59 +816,59 @@ const ReelsView = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setUploading(true);
       const reader = new FileReader();
       reader.onloadend = () => {
         setReelMedia(reader.result as string);
-        setUploading(false);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleUpload = async () => {
-    const savedUser = localStorage.getItem('styn_user');
-    if (!savedUser) return alert('Please login to upload');
-    const user = JSON.parse(savedUser);
-
-    if (!reelMedia) return alert('Please select a file first');
-
-    await fetch('/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: user.id,
-        content: reelContent,
-        media_url: reelMedia,
-        type: 'reel'
-      })
-    });
-    setShowUpload(false);
-    setReelContent('');
-    setReelMedia('');
-    
-    // Refresh reels
-    fetch('/api/posts?type=reel')
-      .then(res => res.json())
-      .then(data => setReels(data));
+    if (!user || !reelMedia) return alert('Please select a file first');
+    setUploading(true);
+    try {
+      await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          content: reelContent,
+          media_url: reelMedia,
+          type: 'reel'
+        })
+      });
+      setShowUpload(false);
+      setReelContent('');
+      setReelMedia(null);
       
-    alert('Reel uploaded successfully!');
+      const res = await fetch('/api/posts?type=reel');
+      const data = await res.json();
+      setReels(data);
+      alert('Reel uploaded successfully!');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const currentReel = reels[currentReelIndex % reels.length];
 
   return (
-    <div className="h-[calc(100vh-4rem)] bg-black flex items-center justify-center relative">
-      <button 
-        onClick={() => setShowUpload(true)}
-        className="absolute top-8 right-8 z-30 bg-brand text-black px-6 py-2 rounded-full font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-      >
-        Upload Reel
-      </button>
+    <div className="h-[calc(100vh-4rem)] bg-black flex items-center justify-center relative overflow-hidden">
+      {user && (
+        <button 
+          onClick={() => setShowUpload(true)}
+          className="absolute top-4 md:top-8 right-4 md:right-8 z-30 bg-brand text-black px-4 md:px-6 py-2 rounded-full font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg text-[10px] md:text-xs"
+        >
+          Upload Reel
+        </button>
+      )}
 
       {showUpload && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[60] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-8 w-full max-w-md">
+          <div className="bg-zinc-900 border border-white/10 rounded-[2.5rem] p-6 md:p-8 w-full max-w-md">
             <h3 className="text-2xl font-black tracking-tighter mb-6">UPLOAD REEL</h3>
             <div className="space-y-4">
               <textarea 
@@ -823,48 +927,71 @@ const ReelsView = () => {
       )}
 
       {reels.length > 0 ? (
-        <div className="h-full aspect-[9/16] bg-zinc-900 relative group overflow-hidden" onClick={() => setCurrentReelIndex(c => c + 1)}>
-          <img 
-            src={currentReel.media_url} 
-            alt="" 
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
+        <div className="h-full w-full max-w-[500px] aspect-[9/16] bg-zinc-900 relative group overflow-hidden shadow-2xl">
+          {currentReel.media_url.includes('video') || currentReel.media_url.endsWith('.mp4') ? (
+            <video 
+              src={currentReel.media_url} 
+              className="w-full h-full object-cover"
+              autoPlay 
+              loop 
+              muted 
+              playsInline
+            />
+          ) : (
+            <img 
+              src={currentReel.media_url} 
+              alt="" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" onClick={() => setCurrentReelIndex(c => c + 1)} />
           
           {/* Interaction Sidebar */}
-          <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center">
+          <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center z-10">
             <div className="flex flex-col items-center gap-1">
-              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-                <Heart size={24} />
+              <button className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <Heart size={20} className="md:w-6 md:h-6" />
               </button>
               <span className="text-[10px] font-bold">{currentReel.likes_count || 0}</span>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-                <MessageSquare size={24} />
+              <button className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <MessageSquare size={20} className="md:w-6 md:h-6" />
               </button>
               <span className="text-[10px] font-bold">1.2k</span>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-                <Share2 size={24} />
+              <button className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <Share2 size={20} className="md:w-6 md:h-6" />
               </button>
               <span className="text-[10px] font-bold">Share</span>
             </div>
           </div>
 
+          {/* Navigation Arrows (Desktop) */}
+          <button 
+            onClick={(e) => { e.stopPropagation(); setCurrentReelIndex(c => (c > 0 ? c - 1 : reels.length - 1)); }}
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/20 backdrop-blur-md hidden md:flex items-center justify-center hover:bg-black/40 transition-all z-10"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setCurrentReelIndex(c => c + 1); }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/20 backdrop-blur-md hidden md:flex items-center justify-center hover:bg-black/40 transition-all z-10"
+          >
+            <ChevronRight size={24} />
+          </button>
+
           {/* Info */}
-          <div className="absolute bottom-0 left-0 right-0 p-6">
+          <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 z-10">
             <div className="flex items-center gap-3 mb-4">
-              <img src={currentReel.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-10 h-10 rounded-full border-2 border-white object-cover" />
-              <p className="font-bold">@{currentReel.username}</p>
+              <img src={currentReel.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-white object-cover" />
+              <p className="font-bold text-sm md:text-base">@{currentReel.username}</p>
               <button 
                 onClick={async (e) => {
                   e.stopPropagation();
-                  const savedUser = localStorage.getItem('styn_user');
-                  if (!savedUser) return alert('Please login to follow');
-                  const user = JSON.parse(savedUser);
+                  if (!user) return alert('Please login to follow');
                   await fetch('/api/follow', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -872,15 +999,15 @@ const ReelsView = () => {
                   });
                   alert(`Followed @${currentReel.username}!`);
                 }}
-                className="px-3 py-1 rounded-full border border-white text-[10px] font-bold uppercase tracking-widest"
+                className="px-3 py-1 rounded-full border border-white text-[8px] md:text-[10px] font-bold uppercase tracking-widest"
               >
                 Follow
               </button>
             </div>
-            <p className="text-sm mb-4">{currentReel.content}</p>
-            <div className="flex items-center gap-2 text-xs text-white/70">
-              <Play size={12} fill="currentColor" />
-              <span>Original Audio - {currentReel.username}</span>
+            <p className="text-xs md:text-sm mb-4 line-clamp-2">{currentReel.content}</p>
+            <div className="flex items-center gap-2 text-[10px] md:text-xs text-white/70">
+              <Play size={10} fill="currentColor" />
+              <span className="truncate">Original Audio - {currentReel.username}</span>
             </div>
           </div>
         </div>
