@@ -24,7 +24,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
@@ -42,6 +43,8 @@ type View = 'home' | 'dating' | 'reels' | 'chat' | 'blockbuster' | 'profile' | '
 interface UserData {
   id: number;
   username: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   avatar_url?: string;
   points: number;
@@ -485,6 +488,21 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
                     <span className="text-sm text-white/40">Active Users</span>
                     <span className="text-xl font-black text-brand">{stats.activeUsers}</span>
                   </div>
+                  <button 
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to remove follows from users without full names?')) {
+                        const res = await fetch('/api/admin/cleanup-followers', {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${user?.token}` }
+                        });
+                        const data = await res.json();
+                        alert(`Successfully removed ${data.removedCount} fake follows.`);
+                      }
+                    }}
+                    className="w-full py-2 mt-4 rounded-xl bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
+                  >
+                    Cleanup Fake Followers
+                  </button>
                 </div>
               </div>
               <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8">
@@ -842,6 +860,27 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
     }
   };
 
+  const handleFollow = async (targetId: number) => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/follow', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify({
+          follower_id: user.id,
+          following_id: targetId
+        })
+      });
+      const data = await res.json();
+      setProfiles(prev => prev.map(p => p.id === targetId ? { ...p, isFollowing: data.followed } : p));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   if (!user) return <div className="flex flex-col items-center justify-center h-[80vh] text-center px-4">
     <Heart size={64} className="text-white/10 mb-6" />
     <h2 className="text-3xl font-black tracking-tighter mb-2">FIND YOUR MATCH</h2>
@@ -918,6 +957,17 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
           className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all shadow-xl"
         >
           <Heart size={32} fill="currentColor" />
+        </button>
+        <button 
+          onClick={() => handleFollow(currentProfile.id)}
+          className={cn(
+            "w-16 h-16 rounded-full border flex items-center justify-center transition-all",
+            currentProfile.isFollowing 
+              ? "bg-brand border-brand text-black" 
+              : "border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+          )}
+        >
+          <UserPlus size={24} />
         </button>
         <button 
           onClick={() => setCurrentIndex(c => c + 1)}
@@ -1401,8 +1451,11 @@ const BlockbusterView = () => {
 
 const ProfileView = ({ user }: { user: UserData | null }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [editData, setEditData] = useState({
     username: user?.username || '',
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
     bio: user?.bio || '',
     interests: user?.interests || '',
     avatar_url: user?.avatar_url || '',
@@ -1410,6 +1463,18 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
     gender: user?.gender || '',
     location: user?.location || ''
   });
+
+  useEffect(() => {
+    if (user) {
+      fetch(`/api/users/${user.id}`, {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        setStats({ followers: data.followersCount, following: data.followingCount });
+      });
+    }
+  }, [user]);
 
   if (!user) return null;
 
@@ -1465,6 +1530,22 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
 
           {isEditing ? (
             <div className="w-full max-w-md space-y-4 mb-8">
+              <div className="grid grid-cols-2 gap-4">
+                <input 
+                  type="text" 
+                  value={editData.first_name} 
+                  onChange={e => setEditData({...editData, first_name: e.target.value})}
+                  placeholder="First Name"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-sm font-bold focus:border-brand outline-none"
+                />
+                <input 
+                  type="text" 
+                  value={editData.last_name} 
+                  onChange={e => setEditData({...editData, last_name: e.target.value})}
+                  placeholder="Last Name"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-sm font-bold focus:border-brand outline-none"
+                />
+              </div>
               <input 
                 type="text" 
                 value={editData.username} 
@@ -1518,7 +1599,10 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
           ) : (
             <>
               <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-3xl md:text-4xl font-black tracking-tighter">{user.username}</h2>
+                <h2 className="text-3xl md:text-4xl font-black tracking-tighter">
+                  {user.first_name} {user.last_name}
+                  <span className="text-white/40 text-lg ml-2 font-medium">@{user.username}</span>
+                </h2>
                 {user.is_super_admin === 1 && (
                   <span className="bg-brand text-black text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Super Admin</span>
                 )}
@@ -1541,15 +1625,15 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
           
           <div className="grid grid-cols-3 gap-4 md:gap-12 mb-12 border-y border-white/10 py-8 w-full max-w-lg">
             <div>
-              <p className="text-xl md:text-2xl font-black tracking-tighter">1.2k</p>
+              <p className="text-xl md:text-2xl font-black tracking-tighter">{stats.followers}</p>
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Followers</p>
             </div>
             <div>
-              <p className="text-xl md:text-2xl font-black tracking-tighter">482</p>
+              <p className="text-xl md:text-2xl font-black tracking-tighter">{stats.following}</p>
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Following</p>
             </div>
             <div>
-              <p className="text-xl md:text-2xl font-black tracking-tighter">154</p>
+              <p className="text-xl md:text-2xl font-black tracking-tighter">0</p>
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Posts</p>
             </div>
           </div>
@@ -1575,6 +1659,8 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
   const [step, setStep] = useState(1); // 1: Auth, 2: Profile Details
   const [formData, setFormData] = useState({ 
     username: '', 
+    first_name: '',
+    last_name: '',
     email: '', 
     password: '',
     age: '',
@@ -1625,7 +1711,8 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
             body: JSON.stringify({ 
               username: formData.username, 
               email: formData.email, 
-              password: formData.password 
+              password: formData.password,
+              age: formData.age
             })
           });
           
@@ -1652,6 +1739,8 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
             body: JSON.stringify({
               id: user.id,
               username: user.username,
+              first_name: formData.first_name,
+              last_name: formData.last_name,
               age: parseInt(formData.age),
               gender: formData.gender,
               location: formData.location,
@@ -1726,6 +1815,30 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
             </>
           ) : (
             <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">First Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                    placeholder="John"
+                    value={formData.first_name}
+                    onChange={e => setFormData({...formData, first_name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Last Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                    placeholder="Doe"
+                    value={formData.last_name}
+                    onChange={e => setFormData({...formData, last_name: e.target.value})}
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Age</label>

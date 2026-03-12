@@ -19,6 +19,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
+    first_name TEXT,
+    last_name TEXT,
     email TEXT UNIQUE,
     password TEXT,
     phone TEXT,
@@ -36,7 +38,16 @@ db.exec(`
     last_login DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+`);
 
+try {
+  db.prepare('ALTER TABLE users ADD COLUMN first_name TEXT').run();
+} catch (e) {}
+try {
+  db.prepare('ALTER TABLE users ADD COLUMN last_name TEXT').run();
+} catch (e) {}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS user_points (
     user_id INTEGER PRIMARY KEY,
     points_total INTEGER DEFAULT 0,
@@ -386,11 +397,14 @@ async function startServer() {
 
   // Auth
   app.post('/api/auth/signup', (req, res) => {
-    const { username, email, password } = req.body;
+    const { username, email, password, age } = req.body;
+    if (age && parseInt(age) < 18) {
+      return res.status(400).json({ error: 'You must be at least 18 years old to join.' });
+    }
     try {
       const hashedPassword = bcrypt.hashSync(password, 10);
-      const info = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run(username, email, hashedPassword);
-      const user = { id: info.lastInsertRowid, username, email, is_super_admin: 0 };
+      const info = db.prepare('INSERT INTO users (username, email, password, age) VALUES (?, ?, ?, ?)').run(username, email, hashedPassword, age);
+      const user = { id: info.lastInsertRowid, username, email, is_super_admin: 0, age };
       const token = jwt.sign(user, JWT_SECRET, { expiresIn: '24h' });
       res.json({ user, token });
     } catch (err) {
@@ -446,15 +460,40 @@ async function startServer() {
 
   // User Profile & Social
   app.put('/api/profile', authenticateToken, (req: any, res: any) => {
-    const { id, username, bio, avatar_url, interests, age, gender, location } = req.body;
+    const { id, username, first_name, last_name, bio, avatar_url, interests, age, gender, location } = req.body;
     if (req.user.id !== id && !req.user.is_super_admin) return res.sendStatus(403);
+    
+    if (age && age < 18) {
+      return res.status(400).json({ error: 'Minimum age requirement is 18.' });
+    }
+
     try {
-      db.prepare('UPDATE users SET username = ?, bio = ?, avatar_url = ?, interests = ?, age = ?, gender = ?, location = ? WHERE id = ?').run(username, bio, avatar_url, interests, age, gender, location, id);
+      db.prepare(`
+        UPDATE users 
+        SET username = ?, first_name = ?, last_name = ?, bio = ?, avatar_url = ?, interests = ?, age = ?, gender = ?, location = ? 
+        WHERE id = ?
+      `).run(username, first_name, last_name, bio, avatar_url, interests, age, gender, location, id);
       const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
       res.json(updatedUser);
     } catch (err) {
       res.status(400).json({ error: 'Failed to update profile' });
     }
+  });
+
+  app.get('/api/users/:id', authenticateToken, (req: any, res: any) => {
+    const user = db.prepare('SELECT id, username, first_name, last_name, bio, location, avatar_url, interests, points, level, age, gender FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const isFollowing = db.prepare('SELECT * FROM follows WHERE follower_id = ? AND following_id = ?').get(req.user.id, req.params.id);
+    const followersCount = db.prepare('SELECT COUNT(*) as count FROM follows WHERE following_id = ?').get(req.params.id).count;
+    const followingCount = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(req.params.id).count;
+    
+    res.json({ 
+      ...user, 
+      isFollowing: !!isFollowing,
+      followersCount,
+      followingCount
+    });
   });
 
   app.post('/api/follow', authenticateToken, (req: any, res: any) => {
@@ -489,6 +528,19 @@ async function startServer() {
     const adRevenue = db.prepare('SELECT SUM(revenue) as total FROM ads').get().total || 0;
     
     res.json({ totalUsers, newUsersToday, totalPosts, totalReels, totalMessages, activeUsers, topUsers, adRevenue });
+  });
+
+  app.post('/api/admin/cleanup-followers', authenticateToken, adminOnly, (req: any, res: any) => {
+    try {
+      // Define "fake" as users with no first_name or last_name
+      const info = db.prepare(`
+        DELETE FROM follows 
+        WHERE follower_id IN (SELECT id FROM users WHERE first_name IS NULL OR last_name IS NULL)
+      `).run();
+      res.json({ success: true, removedCount: info.changes });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to cleanup followers' });
+    }
   });
 
   app.get('/api/admin/users', authenticateToken, adminOnly, (req: any, res: any) => {
