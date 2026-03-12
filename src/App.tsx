@@ -448,17 +448,6 @@ const AdminView = () => {
 const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserData | null }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <header className="mb-8 md:mb-12">
-        <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-4 uppercase">DISCOVER<br/><span className="text-white/20 italic serif normal-case">The Pulse of STYN</span></h2>
-        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-          {['Trending', 'Featured', 'Gaming', 'Music', 'Tech'].map(tag => (
-            <span key={tag} className="flex-shrink-0 px-4 py-1 rounded-full border border-white/10 text-[10px] font-bold uppercase tracking-widest text-white/50 hover:border-brand hover:text-brand cursor-pointer transition-all">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      </header>
-
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Feed */}
         <div className="lg:col-span-8 space-y-6 md:space-y-8">
@@ -705,6 +694,14 @@ const ReelsView = () => {
   const [reelContent, setReelContent] = useState('');
   const [reelMedia, setReelMedia] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [reels, setReels] = useState<any[]>([]);
+  const [currentReelIndex, setCurrentReelIndex] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/posts?type=reel')
+      .then(res => res.json())
+      .then(data => setReels(data));
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -739,8 +736,16 @@ const ReelsView = () => {
     setShowUpload(false);
     setReelContent('');
     setReelMedia('');
+    
+    // Refresh reels
+    fetch('/api/posts?type=reel')
+      .then(res => res.json())
+      .then(data => setReels(data));
+      
     alert('Reel uploaded successfully!');
   };
+
+  const currentReel = reels[currentReelIndex % reels.length];
 
   return (
     <div className="h-[calc(100vh-4rem)] bg-black flex items-center justify-center relative">
@@ -811,66 +816,74 @@ const ReelsView = () => {
         </div>
       )}
 
-      <div className="h-full aspect-[9/16] bg-zinc-900 relative group overflow-hidden">
-        <img 
-          src="https://picsum.photos/seed/reel1/1080/1920" 
-          alt="" 
-          className="w-full h-full object-cover"
-          referrerPolicy="no-referrer"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
-        
-        {/* Interaction Sidebar */}
-        <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center">
-          <div className="flex flex-col items-center gap-1">
-            <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-              <Heart size={24} />
-            </button>
-            <span className="text-[10px] font-bold">42.5k</span>
+      {reels.length > 0 ? (
+        <div className="h-full aspect-[9/16] bg-zinc-900 relative group overflow-hidden" onClick={() => setCurrentReelIndex(c => c + 1)}>
+          <img 
+            src={currentReel.media_url} 
+            alt="" 
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
+          
+          {/* Interaction Sidebar */}
+          <div className="absolute right-4 bottom-24 flex flex-col gap-6 items-center">
+            <div className="flex flex-col items-center gap-1">
+              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <Heart size={24} />
+              </button>
+              <span className="text-[10px] font-bold">{currentReel.likes_count || 0}</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <MessageSquare size={24} />
+              </button>
+              <span className="text-[10px] font-bold">1.2k</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
+                <Share2 size={24} />
+              </button>
+              <span className="text-[10px] font-bold">Share</span>
+            </div>
           </div>
-          <div className="flex flex-col items-center gap-1">
-            <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-              <MessageSquare size={24} />
-            </button>
-            <span className="text-[10px] font-bold">1.2k</span>
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <button className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-all">
-              <Share2 size={24} />
-            </button>
-            <span className="text-[10px] font-bold">Share</span>
-          </div>
-        </div>
 
-        {/* Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full border-2 border-white bg-white/20" />
-            <p className="font-bold">@styn_official</p>
-            <button 
-              onClick={async () => {
-                const savedUser = localStorage.getItem('styn_user');
-                if (!savedUser) return alert('Please login to follow');
-                const user = JSON.parse(savedUser);
-                await fetch('/api/follow', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ follower_id: user.id, following_id: 1 }) // mock official id
-                });
-                alert('Followed official account!');
-              }}
-              className="px-3 py-1 rounded-full border border-white text-[10px] font-bold uppercase tracking-widest"
-            >
-              Follow
-            </button>
-          </div>
-          <p className="text-sm mb-4">Check out this amazing sunset! 🌅 #nature #vibes #styn</p>
-          <div className="flex items-center gap-2 text-xs text-white/70">
-            <Play size={12} fill="currentColor" />
-            <span>Original Audio - styn_official</span>
+          {/* Info */}
+          <div className="absolute bottom-0 left-0 right-0 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <img src={currentReel.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-10 h-10 rounded-full border-2 border-white object-cover" />
+              <p className="font-bold">@{currentReel.username}</p>
+              <button 
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const savedUser = localStorage.getItem('styn_user');
+                  if (!savedUser) return alert('Please login to follow');
+                  const user = JSON.parse(savedUser);
+                  await fetch('/api/follow', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ follower_id: user.id, following_id: currentReel.user_id })
+                  });
+                  alert(`Followed @${currentReel.username}!`);
+                }}
+                className="px-3 py-1 rounded-full border border-white text-[10px] font-bold uppercase tracking-widest"
+              >
+                Follow
+              </button>
+            </div>
+            <p className="text-sm mb-4">{currentReel.content}</p>
+            <div className="flex items-center gap-2 text-xs text-white/70">
+              <Play size={12} fill="currentColor" />
+              <span>Original Audio - {currentReel.username}</span>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="text-center">
+          <Play size={64} className="text-white/10 mx-auto mb-4" />
+          <p className="text-white/40">No reels found. Be the first to upload!</p>
+        </div>
+      )}
     </div>
   );
 };

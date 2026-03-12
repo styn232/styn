@@ -115,6 +115,68 @@ db.exec(`
   );
 `);
 
+// --- SEED DATA ---
+const seedData = () => {
+  const superAdmin = db.prepare('SELECT * FROM users WHERE email = ?').get('styn@styni.com');
+  if (!superAdmin) {
+    const info = db.prepare(`
+      INSERT INTO users (username, email, password, is_super_admin, bio, avatar_url, interests) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'SuperAdmin', 
+      'styn@styni.com', 
+      'chiminya', 
+      1, 
+      'The official STYN Super Administrator.', 
+      'https://picsum.photos/seed/admin/200/200',
+      'Technology, Management, Innovation'
+    );
+    const adminId = info.lastInsertRowid;
+
+    // Add some reels for Super Admin
+    db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
+      adminId,
+      'Welcome to the future of STYN! 🚀',
+      'https://picsum.photos/seed/reel_admin1/1080/1920',
+      'reel'
+    );
+    db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
+      adminId,
+      'Our mission is to connect the world through creativity.',
+      'https://picsum.photos/seed/reel_admin2/1080/1920',
+      'reel'
+    );
+  }
+
+  // Seed 5 Dating Profiles
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  if (userCount < 6) {
+    const datingProfiles = [
+      ['Sarah J.', 'sarah@example.com', 'Art, Travel, Photography', 'Adventure seeker and coffee lover.'],
+      ['Mike Ross', 'mike@example.com', 'Gaming, Tech, Music', 'Building the future, one line at a time.'],
+      ['Elena V.', 'elena@example.com', 'Yoga, Fitness, Healthy Food', 'Finding balance in a chaotic world.'],
+      ['David K.', 'david@example.com', 'Cooking, Wine, Movies', 'Foodie at heart, looking for a dinner partner.'],
+      ['Sophia L.', 'sophia@example.com', 'Books, Writing, Nature', 'Lost in a good book or a deep forest.']
+    ];
+
+    datingProfiles.forEach(([username, email, interests, bio]) => {
+      db.prepare(`
+        INSERT INTO users (username, email, password, interests, bio, avatar_url) 
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        username, 
+        email, 
+        'password123', 
+        interests, 
+        bio, 
+        `https://picsum.photos/seed/${username.replace(' ', '')}/200/200`
+      );
+    });
+  }
+};
+
+seedData();
+
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
