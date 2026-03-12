@@ -177,7 +177,7 @@ const seedData = () => {
   }
 
   // Add some reels for Super Admin
-  const reelCount = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "reel"').get().count;
+  const reelCount = db.prepare("SELECT COUNT(*) as count FROM posts WHERE type = 'reel'").get().count;
   if (reelCount < 5) {
     const sampleReels = [
       ['Vibrant Cape Town Streets 🇿🇦', 'https://picsum.photos/seed/sa_reel1/1080/1920'],
@@ -194,7 +194,7 @@ const seedData = () => {
   }
 
   // Seed 10 South African Profiles
-  const saProfilesCount = db.prepare('SELECT COUNT(*) as count FROM users WHERE location LIKE "%South Africa%"').get().count;
+  const saProfilesCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE location LIKE '%South Africa%'").get().count;
   if (saProfilesCount < 10) {
     const saGirls = [
       ['Zanele M.', 'zanele@styn.sa', 'Cape Town, South Africa', 'Fashion, Design, Music'],
@@ -462,7 +462,7 @@ async function startServer() {
     
     if (status === 'matched') {
       // Check if user2 also liked user1
-      const reverseMatch = db.prepare('SELECT * FROM matches WHERE user1_id = ? AND user2_id = ? AND status = "matched"').get(user2_id, user1_id);
+      const reverseMatch = db.prepare("SELECT * FROM matches WHERE user1_id = ? AND user2_id = ? AND status = 'matched'").get(user2_id, user1_id);
       if (reverseMatch) {
         return res.json({ match: true });
       }
