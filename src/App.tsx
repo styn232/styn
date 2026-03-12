@@ -51,6 +51,7 @@ interface UserData {
   age?: number;
   gender?: string;
   location?: string;
+  token?: string;
 }
 
 // --- Components ---
@@ -269,7 +270,7 @@ export default function App() {
       case 'blockbuster':
         return <BlockbusterView />;
       case 'admin':
-        return <AdminView setView={setView} />;
+        return <AdminView setView={setView} user={user} />;
       case 'profile':
         return <ProfileView user={user} />;
       case 'auth':
@@ -387,7 +388,46 @@ const AdBanner = () => {
 
 // --- Sub-Views ---
 
-const AdminView = ({ setView }: { setView: (v: View) => void }) => {
+const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserData | null }) => {
+  const [stats, setStats] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'reports' | 'ads'>('stats');
+
+  useEffect(() => {
+    if (!user?.token) return;
+    
+    const fetchStats = async () => {
+      const res = await fetch('/api/admin/stats', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      setStats(data);
+    };
+
+    const fetchUsers = async () => {
+      const res = await fetch('/api/admin/users', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      setUsers(data);
+    };
+
+    const fetchReports = async () => {
+      const res = await fetch('/api/admin/reports', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      setReports(data);
+    };
+
+    fetchStats();
+    fetchUsers();
+    fetchReports();
+  }, [user]);
+
+  if (!stats) return <div className="p-12 text-center animate-pulse">Loading Admin Panel...</div>;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -404,36 +444,131 @@ const AdminView = ({ setView }: { setView: (v: View) => void }) => {
         </div>
         <div className="flex gap-4">
           <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-center">
-            <p className="text-2xl font-black">1.2M</p>
-            <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Active Users</p>
+            <p className="text-2xl font-black">{stats.totalUsers}</p>
+            <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Total Users</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-center">
-            <p className="text-2xl font-black">450k</p>
-            <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Daily Posts</p>
+            <p className="text-2xl font-black">{stats.totalPosts + stats.totalReels}</p>
+            <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Total Content</p>
           </div>
         </div>
       </header>
 
+      <div className="flex gap-4 mb-8 overflow-x-auto no-scrollbar pb-2">
+        {['stats', 'users', 'reports', 'ads'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as any)}
+            className={cn(
+              "px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all",
+              activeTab === tab ? "bg-brand text-black border-brand" : "bg-white/5 text-white/40 border-white/10"
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <section className="lg:col-span-2 bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
-          <h3 className="text-xl font-bold mb-6">Content Moderation Queue</h3>
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-white/10" />
-                  <div>
-                    <p className="font-bold text-sm">Reported Post #{1234 + i}</p>
-                    <p className="text-xs text-white/40">Reported by 12 users • Hate Speech</p>
+        <section className="lg:col-span-2 space-y-8">
+          {activeTab === 'stats' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8">
+                <h3 className="text-lg font-bold mb-4">User Growth</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-white/40">New Users Today</span>
+                    <span className="text-xl font-black text-emerald-400">+{stats.newUsersToday}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-white/40">Active Users</span>
+                    <span className="text-xl font-black text-brand">{stats.activeUsers}</span>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button className="px-4 py-2 rounded-xl bg-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500 hover:text-white transition-all">Remove</button>
-                  <button className="px-4 py-2 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-all">Dismiss</button>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8">
+                <h3 className="text-lg font-bold mb-4">Content Stats</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-white/40">Posts</span>
+                    <span className="text-xl font-black">{stats.totalPosts}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-white/40">Reels</span>
+                    <span className="text-xl font-black">{stats.totalReels}</span>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 md:col-span-2">
+                <h3 className="text-lg font-bold mb-4">Top Users by Points</h3>
+                <div className="space-y-3">
+                  {stats.topUsers.map((u: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-white/5">
+                      <span className="text-sm font-bold">@{u.username}</span>
+                      <span className="text-xs font-mono text-brand">{u.points} PTS</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+              <h3 className="text-xl font-bold mb-6">User Management</h3>
+              <div className="space-y-4">
+                {users.map(u => (
+                  <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden">
+                        {u.avatar_url && <img src={u.avatar_url} className="w-full h-full object-cover" />}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">@{u.username}</p>
+                        <p className="text-[10px] text-white/40">{u.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {u.is_banned ? (
+                        <button className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">Unban</button>
+                      ) : (
+                        <button className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-bold uppercase">Ban</button>
+                      )}
+                      <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[10px] font-bold uppercase">Edit</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+              <h3 className="text-xl font-bold mb-6">Reports Queue</h3>
+              <div className="space-y-4">
+                {reports.length === 0 ? (
+                  <p className="text-center text-white/20 py-12">No pending reports.</p>
+                ) : (
+                  reports.map(r => (
+                    <div key={r.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-sm">Report by @{r.username}</p>
+                          <p className="text-xs text-red-400">Reason: {r.reason}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded bg-white/10 text-[8px] font-bold uppercase">{r.status}</span>
+                      </div>
+                      <p className="text-xs text-white/60 italic">"{r.post_content}"</p>
+                      <div className="flex gap-2 pt-2">
+                        <button className="flex-1 py-2 rounded-xl bg-red-500/20 text-red-400 text-[10px] font-bold uppercase">Delete Post</button>
+                        <button className="flex-1 py-2 rounded-xl bg-white/10 text-white text-[10px] font-bold uppercase">Dismiss</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
@@ -450,20 +585,19 @@ const AdminView = ({ setView }: { setView: (v: View) => void }) => {
             </div>
             <div>
               <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40 mb-2">
-                <span>Storage (CDN)</span>
-                <span className="text-indigo-400">68%</span>
+                <span>Ad Revenue</span>
+                <span className="text-indigo-400">${stats.adRevenue}</span>
               </div>
               <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                 <div className="h-full bg-indigo-400 w-[68%]" />
               </div>
             </div>
-            <div className="pt-6 border-t border-white/10">
-              <h4 className="text-xs font-black uppercase tracking-widest text-white/30 mb-4">Quick Actions</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="p-4 rounded-2xl bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all">Broadcast</button>
-                <button className="p-4 rounded-2xl bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all">Maintenance</button>
-              </div>
-            </div>
+          </div>
+          
+          <div className="mt-12 pt-12 border-t border-white/10 space-y-4">
+            <button className="w-full py-4 rounded-2xl bg-brand text-black font-black uppercase tracking-widest text-xs">New Announcement</button>
+            <button className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs">Site Settings</button>
+            <button className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs">Mailing List</button>
           </div>
         </section>
       </div>
@@ -1249,15 +1383,18 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
   const handleSave = async () => {
     const res = await fetch('/api/profile', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
       body: JSON.stringify({
         id: user.id,
         ...editData
       })
     });
     const updated = await res.json();
-    localStorage.setItem('styn_user', JSON.stringify(updated));
-    window.location.reload(); // Simple way to refresh state
+    localStorage.setItem('styn_user', JSON.stringify({ ...updated, token: user.token }));
+    window.location.reload();
   };
 
   return (

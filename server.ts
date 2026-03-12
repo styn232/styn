@@ -5,11 +5,14 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database('styn.db');
+const JWT_SECRET = 'styn_super_secret_key_2026';
 
 // Initialize Database Schema
 db.exec(`
@@ -26,45 +29,37 @@ db.exec(`
     points INTEGER DEFAULT 0,
     level TEXT DEFAULT 'Bronze',
     is_super_admin INTEGER DEFAULT 0,
+    is_verified INTEGER DEFAULT 0,
+    is_banned INTEGER DEFAULT 0,
     age INTEGER,
     gender TEXT,
+    last_login DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
-  -- Add columns if they don't exist (for existing databases)
-  PRAGMA foreign_keys=off;
-  BEGIN TRANSACTION;
-  CREATE TABLE IF NOT EXISTS users_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    email TEXT UNIQUE,
-    password TEXT,
-    phone TEXT,
-    bio TEXT,
-    location TEXT,
-    avatar_url TEXT,
-    interests TEXT,
-    points INTEGER DEFAULT 0,
-    level TEXT DEFAULT 'Bronze',
-    is_super_admin INTEGER DEFAULT 0,
-    age INTEGER,
-    gender TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  CREATE TABLE IF NOT EXISTS user_points (
+    user_id INTEGER PRIMARY KEY,
+    points_total INTEGER DEFAULT 0,
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
   );
-  INSERT OR IGNORE INTO users_new (id, username, email, password, phone, bio, location, avatar_url, interests, points, level, is_super_admin, created_at)
-  SELECT id, username, email, password, phone, bio, location, avatar_url, interests, points, level, is_super_admin, created_at FROM users;
-  DROP TABLE users;
-  ALTER TABLE users_new RENAME TO users;
-  COMMIT;
-  PRAGMA foreign_keys=on;
+
+  CREATE TABLE IF NOT EXISTS user_levels (
+    user_id INTEGER PRIMARY KEY,
+    level TEXT DEFAULT 'Bronze',
+    points_required INTEGER DEFAULT 0,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
 
   CREATE TABLE IF NOT EXISTS ads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT,
     content TEXT,
-    image_url TEXT,
+    media_url TEXT,
     link_url TEXT,
-    is_active INTEGER DEFAULT 1,
+    placement TEXT, -- 'home', 'reels', 'sidebar', 'blockbuster'
+    status TEXT DEFAULT 'active', -- 'active', 'paused'
+    revenue REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -75,6 +70,7 @@ db.exec(`
     media_url TEXT,
     type TEXT, -- 'post', 'reel', 'blockbuster'
     likes_count INTEGER DEFAULT 0,
+    is_deleted INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
@@ -130,17 +126,50 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS user_activity (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
-    activity_type TEXT, -- 'like', 'comment', 'reel_view', 'post_view'
+    activity_type TEXT, -- 'like', 'comment', 'reel_view', 'post_view', 'share'
     target_id INTEGER, -- post_id or reel_id
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
 
-  CREATE TABLE IF NOT EXISTS match_feedback (
+  CREATE TABLE IF NOT EXISTS reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    match_id INTEGER,
-    success_score INTEGER DEFAULT 0, -- 0 to 100, based on chat length/engagement
-    FOREIGN KEY(match_id) REFERENCES matches(id)
+    user_id INTEGER,
+    post_id INTEGER,
+    reason TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'resolved', 'dismissed'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(post_id) REFERENCES posts(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    message TEXT,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS games (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    description TEXT,
+    game_url TEXT,
+    thumbnail TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS banned_ips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip_address TEXT UNIQUE,
+    reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
   );
 
   CREATE TABLE IF NOT EXISTS news (
@@ -154,18 +183,89 @@ db.exec(`
   );
 `);
 
+// --- HELPERS ---
+const addPoints = (userId: number, amount: number) => {
+  const user = db.prepare('SELECT points, last_login FROM users WHERE id = ?').get(userId);
+  if (!user) return;
+
+  // Check for daily login (2 points)
+  let finalAmount = amount;
+  const today = new Date().toISOString().split('T')[0];
+  const lastLoginDay = user.last_login ? user.last_login.split('T')[0] : null;
+  
+  if (lastLoginDay !== today) {
+    finalAmount += 2;
+    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+  }
+
+  const newPoints = user.points + finalAmount;
+  let level = 'Bronze';
+  if (newPoints >= 5000) level = 'Gold';
+  else if (newPoints >= 1000) level = 'Silver';
+
+  db.prepare('UPDATE users SET points = ?, level = ? WHERE id = ?').run(newPoints, level, userId);
+  db.prepare('INSERT OR REPLACE INTO user_points (user_id, points_total, last_updated) VALUES (?, ?, CURRENT_TIMESTAMP)').run(userId, newPoints);
+  db.prepare('INSERT OR REPLACE INTO user_levels (user_id, level, points_required) VALUES (?, ?, ?)').run(userId, level, level === 'Gold' ? 5000 : (level === 'Silver' ? 1000 : 0));
+};
+
+const authenticateToken = (req: any, res: any, next: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+const adminOnly = (req: any, res: any, next: any) => {
+  if (req.user && req.user.is_super_admin) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Admin access required' });
+  }
+};
+
+const checkIPBan = (req: any, res: any, next: any) => {
+  const ip = req.ip;
+  const banned = db.prepare('SELECT * FROM banned_ips WHERE ip_address = ?').get(ip);
+  if (banned) {
+    res.status(403).json({ error: 'Your IP is banned', reason: banned.reason });
+  } else {
+    next();
+  }
+};
+
 // --- SEED DATA ---
 const seedData = () => {
+  // Initialize site settings
+  const settings = db.prepare('SELECT COUNT(*) as count FROM site_settings').get().count;
+  if (settings === 0) {
+    const defaultSettings = [
+      ['site_name', 'STYN'],
+      ['site_title', 'STYN - Social Media Platform'],
+      ['seo_keywords', 'social, media, styn, connect'],
+      ['theme', 'dark'],
+      ['analytics_code', '']
+    ];
+    defaultSettings.forEach(([key, value]) => {
+      db.prepare('INSERT INTO site_settings (key, value) VALUES (?, ?)').run(key, value);
+    });
+  }
+
   const superAdmin = db.prepare('SELECT * FROM users WHERE email = ?').get('styn@styni.com');
   let adminId: number | bigint = 0;
   if (!superAdmin) {
+    const hashedPassword = bcrypt.hashSync('chiminya', 10);
     const info = db.prepare(`
       INSERT INTO users (username, email, password, is_super_admin, bio, avatar_url, interests) 
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       'SuperAdmin', 
       'styn@styni.com', 
-      'chiminya', 
+      hashedPassword, 
       1, 
       'The official STYN Super Administrator.', 
       'https://picsum.photos/seed/admin/200/200',
@@ -253,15 +353,19 @@ async function startServer() {
   });
 
   app.use(express.json());
+  app.use(checkIPBan);
 
   // --- API ROUTES ---
 
-  // Auth (Mock for MVP)
+  // Auth
   app.post('/api/auth/signup', (req, res) => {
     const { username, email, password } = req.body;
     try {
-      const info = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run(username, email, password);
-      res.json({ id: info.lastInsertRowid, username, email });
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      const info = db.prepare('INSERT INTO users (username, email, password) VALUES (?, ?, ?)').run(username, email, hashedPassword);
+      const user = { id: info.lastInsertRowid, username, email, is_super_admin: 0 };
+      const token = jwt.sign(user, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ user, token });
     } catch (err) {
       res.status(400).json({ error: 'User already exists' });
     }
@@ -269,17 +373,54 @@ async function startServer() {
 
   app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
-    const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
-    if (user) {
-      res.json(user);
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (user && bcrypt.compareSync(password, user.password)) {
+      // Daily login points
+      const today = new Date().toISOString().split('T')[0];
+      const lastLogin = user.last_login ? user.last_login.split('T')[0] : '';
+      if (today !== lastLogin) {
+        addPoints(user.id, 2);
+        db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+      }
+
+      const token = jwt.sign({ id: user.id, username: user.username, is_super_admin: user.is_super_admin }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ user, token });
     } else {
       res.status(401).json({ error: 'Invalid credentials' });
     }
   });
 
+  // Points & Levels
+  app.get('/api/points/user/:id', (req, res) => {
+    const points = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(req.params.id);
+    res.json(points || { points_total: 0 });
+  });
+
+  app.get('/api/points/leaderboard', (req, res) => {
+    const leaderboard = db.prepare('SELECT users.username, user_points.points_total FROM user_points JOIN users ON user_points.user_id = users.id ORDER BY points_total DESC LIMIT 10').all();
+    res.json(leaderboard);
+  });
+
+  app.post('/api/points/add', authenticateToken, adminOnly, (req, res) => {
+    const { user_id, amount } = req.body;
+    addPoints(user_id, amount);
+    res.json({ success: true });
+  });
+
+  app.get('/api/levels/user/:id', (req, res) => {
+    const level = db.prepare('SELECT * FROM user_levels WHERE user_id = ?').get(req.params.id);
+    res.json(level || { level: 'Bronze' });
+  });
+
+  app.get('/api/levels', (req, res) => {
+    const levels = db.prepare('SELECT level, COUNT(*) as count FROM user_levels GROUP BY level').all();
+    res.json(levels);
+  });
+
   // User Profile & Social
-  app.put('/api/profile', (req, res) => {
+  app.put('/api/profile', authenticateToken, (req: any, res: any) => {
     const { id, username, bio, avatar_url, interests, age, gender, location } = req.body;
+    if (req.user.id !== id && !req.user.is_super_admin) return res.sendStatus(403);
     try {
       db.prepare('UPDATE users SET username = ?, bio = ?, avatar_url = ?, interests = ?, age = ?, gender = ?, location = ? WHERE id = ?').run(username, bio, avatar_url, interests, age, gender, location, id);
       const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -289,8 +430,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/follow', (req, res) => {
+  app.post('/api/follow', authenticateToken, (req: any, res: any) => {
     const { follower_id, following_id } = req.body;
+    if (req.user.id !== follower_id) return res.sendStatus(403);
     const existing = db.prepare('SELECT * FROM follows WHERE follower_id = ? AND following_id = ?').get(follower_id, following_id);
     
     if (existing) {
@@ -303,13 +445,151 @@ async function startServer() {
   });
 
   app.get('/api/ads', (req, res) => {
-    const ads = db.prepare('SELECT * FROM ads WHERE is_active = 1 ORDER BY RANDOM() LIMIT 1').all();
+    const placement = req.query.placement || 'home';
+    const ads = db.prepare('SELECT * FROM ads WHERE status = "active" AND placement = ? ORDER BY RANDOM() LIMIT 1').all(placement);
     res.json(ads);
   });
 
-  app.post('/api/admin/set-super-admin', (req, res) => {
-    const { user_id, is_admin } = req.body;
-    db.prepare('UPDATE users SET is_super_admin = ? WHERE id = ?').run(is_admin ? 1 : 0, user_id);
+  // Admin Endpoints
+  app.get('/api/admin/stats', authenticateToken, adminOnly, (req: any, res: any) => {
+    const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    const newUsersToday = db.prepare('SELECT COUNT(*) as count FROM users WHERE date(created_at) = date("now")').get().count;
+    const totalPosts = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "post"').get().count;
+    const totalReels = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "reel"').get().count;
+    const totalMessages = db.prepare('SELECT COUNT(*) as count FROM messages').get().count;
+    const activeUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE date(last_login) = date("now")').get().count;
+    const topUsers = db.prepare('SELECT username, points FROM users ORDER BY points DESC LIMIT 5').all();
+    const adRevenue = db.prepare('SELECT SUM(revenue) as total FROM ads').get().total || 0;
+    
+    res.json({ totalUsers, newUsersToday, totalPosts, totalReels, totalMessages, activeUsers, topUsers, adRevenue });
+  });
+
+  app.get('/api/admin/users', authenticateToken, adminOnly, (req: any, res: any) => {
+    const users = db.prepare('SELECT * FROM users').all();
+    res.json(users);
+  });
+
+  app.put('/api/admin/users/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { username, email, is_verified, is_banned, is_super_admin } = req.body;
+    db.prepare('UPDATE users SET username = ?, email = ?, is_verified = ?, is_banned = ?, is_super_admin = ? WHERE id = ?')
+      .run(username, email, is_verified ? 1 : 0, is_banned ? 1 : 0, is_super_admin ? 1 : 0, req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete('/api/admin/users/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/users/ban', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { user_id, reason } = req.body;
+    db.prepare('UPDATE users SET is_banned = 1 WHERE id = ?').run(user_id);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/posts', authenticateToken, adminOnly, (req: any, res: any) => {
+    const posts = db.prepare('SELECT posts.*, users.username FROM posts JOIN users ON posts.user_id = users.id').all();
+    res.json(posts);
+  });
+
+  app.delete('/api/admin/posts/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    db.prepare('UPDATE posts SET is_deleted = 1 WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/reports', authenticateToken, adminOnly, (req: any, res: any) => {
+    const reports = db.prepare('SELECT reports.*, users.username, posts.content as post_content FROM reports JOIN users ON reports.user_id = users.id JOIN posts ON reports.post_id = posts.id').all();
+    res.json(reports);
+  });
+
+  app.post('/api/admin/reports/resolve', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { report_id, status, delete_post } = req.body;
+    db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, report_id);
+    if (delete_post) {
+      const report = db.prepare('SELECT post_id FROM reports WHERE id = ?').get(report_id);
+      db.prepare('UPDATE posts SET is_deleted = 1 WHERE id = ?').run(report.post_id);
+    }
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/ads', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { title, media_url, link_url, placement } = req.body;
+    db.prepare('INSERT INTO ads (title, media_url, link_url, placement) VALUES (?, ?, ?, ?)').run(title, media_url, link_url, placement);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/ads', authenticateToken, adminOnly, (req: any, res: any) => {
+    const ads = db.prepare('SELECT * FROM ads').all();
+    res.json(ads);
+  });
+
+  app.put('/api/admin/ads/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { title, media_url, link_url, placement, status } = req.body;
+    db.prepare('UPDATE ads SET title = ?, media_url = ?, link_url = ?, placement = ?, status = ? WHERE id = ?')
+      .run(title, media_url, link_url, placement, status, req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete('/api/admin/ads/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    db.prepare('DELETE FROM ads WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/announcements', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { title, message } = req.body;
+    db.prepare('INSERT INTO announcements (title, message) VALUES (?, ?)').run(title, message);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/announcements', (req, res) => {
+    const announcements = db.prepare('SELECT * FROM announcements WHERE status = "active" ORDER BY created_at DESC').all();
+    res.json(announcements);
+  });
+
+  app.post('/api/admin/mailing/send', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { subject, message } = req.body;
+    // Mock sending email to all users
+    const users = db.prepare('SELECT email FROM users').all();
+    console.log(`Sending email to ${users.length} users: ${subject}`);
+    res.json({ success: true, count: users.length });
+  });
+
+  app.post('/api/admin/games', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { title, description, game_url, thumbnail } = req.body;
+    db.prepare('INSERT INTO games (title, description, game_url, thumbnail) VALUES (?, ?, ?, ?)').run(title, description, game_url, thumbnail);
+    res.json({ success: true });
+  });
+
+  app.get('/api/games', (req, res) => {
+    const games = db.prepare('SELECT * FROM games').all();
+    res.json(games);
+  });
+
+  app.post('/api/admin/ban-ip', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { ip_address, reason } = req.body;
+    db.prepare('INSERT INTO banned_ips (ip_address, reason) VALUES (?, ?)').run(ip_address, reason);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/banned-ips', authenticateToken, adminOnly, (req: any, res: any) => {
+    const ips = db.prepare('SELECT * FROM banned_ips').all();
+    res.json(ips);
+  });
+
+  app.get('/api/admin/settings', authenticateToken, adminOnly, (req: any, res: any) => {
+    const settings = db.prepare('SELECT * FROM site_settings').all();
+    const settingsObj = settings.reduce((acc: any, curr: any) => {
+      acc[curr.key] = curr.value;
+      return acc;
+    }, {});
+    res.json(settingsObj);
+  });
+
+  app.put('/api/admin/settings', authenticateToken, adminOnly, (req: any, res: any) => {
+    const updates = req.body;
+    for (const [key, value] of Object.entries(updates)) {
+      db.prepare('INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)').run(key, value);
+    }
     res.json({ success: true });
   });
 
@@ -320,9 +600,10 @@ async function startServer() {
       SELECT posts.*, users.username, users.avatar_url 
       FROM posts 
       JOIN users ON posts.user_id = users.id 
+      WHERE posts.is_deleted = 0
     `;
     if (type) {
-      query += ` WHERE posts.type = ?`;
+      query += ` AND posts.type = ?`;
     }
     query += ` ORDER BY posts.created_at DESC`;
     
@@ -338,8 +619,9 @@ async function startServer() {
     res.json(postsWithDetails);
   });
 
-  app.post('/api/posts/like', (req, res) => {
+  app.post('/api/posts/like', authenticateToken, (req: any, res: any) => {
     const { user_id, post_id } = req.body;
+    if (req.user.id !== user_id) return res.sendStatus(403);
     try {
       const existing = db.prepare('SELECT * FROM likes WHERE user_id = ? AND post_id = ?').get(user_id, post_id);
       if (existing) {
@@ -347,6 +629,7 @@ async function startServer() {
         res.json({ liked: false });
       } else {
         db.prepare('INSERT INTO likes (user_id, post_id) VALUES (?, ?)').run(user_id, post_id);
+        addPoints(user_id, 5); // Share/Like points
         res.json({ liked: true });
       }
     } catch (err) {
@@ -354,10 +637,12 @@ async function startServer() {
     }
   });
 
-  app.post('/api/posts/comment', (req, res) => {
+  app.post('/api/posts/comment', authenticateToken, (req: any, res: any) => {
     const { user_id, post_id, content } = req.body;
+    if (req.user.id !== user_id) return res.sendStatus(403);
     try {
       db.prepare('INSERT INTO comments (user_id, post_id, content) VALUES (?, ?, ?)').run(user_id, post_id, content);
+      addPoints(user_id, 5);
       const newComment = db.prepare('SELECT comments.*, users.username, users.avatar_url FROM comments JOIN users ON comments.user_id = users.id WHERE comments.id = last_insert_rowid()').get();
       res.json(newComment);
     } catch (err) {
@@ -370,14 +655,25 @@ async function startServer() {
     res.json(news);
   });
 
-  app.post('/api/posts', (req, res) => {
+  app.post('/api/posts', authenticateToken, (req: any, res: any) => {
     const { user_id, content, media_url, type } = req.body;
+    if (req.user.id !== user_id) return res.sendStatus(403);
     const info = db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(user_id, content, media_url, type);
     
     // Reward points
-    db.prepare('UPDATE users SET points = points + 10 WHERE id = ?').run(user_id);
+    if (type === 'reel') {
+      addPoints(user_id, 15);
+    } else {
+      addPoints(user_id, 10);
+    }
     
     res.json({ id: info.lastInsertRowid });
+  });
+
+  app.post('/api/reports', authenticateToken, (req, res) => {
+    const { user_id, post_id, reason } = req.body;
+    db.prepare('INSERT INTO reports (user_id, post_id, reason) VALUES (?, ?, ?)').run(user_id, post_id, reason);
+    res.json({ success: true });
   });
 
   // Dating - Advanced Matching Algorithm
