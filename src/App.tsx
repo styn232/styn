@@ -1595,9 +1595,19 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: formData.email, password: formData.password })
         });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          try {
+            const errorJson = JSON.parse(errorText);
+            throw new Error(errorJson.error || 'Login failed');
+          } catch {
+            throw new Error(errorText || 'Login failed');
+          }
+        }
+
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        onLogin(data);
+        onLogin({ ...data.user, token: data.token });
       } catch (err: any) {
         alert(err.message);
       } finally {
@@ -1618,13 +1628,27 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
               password: formData.password 
             })
           });
-          const user = await res.json();
-          if (user.error) throw new Error(user.error);
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            try {
+              const errorJson = JSON.parse(errorText);
+              throw new Error(errorJson.error || 'Signup failed');
+            } catch {
+              throw new Error(errorText || 'Signup failed');
+            }
+          }
+
+          const authData = await res.json();
+          const { user, token } = authData;
 
           // Update profile with extra details
           const profileRes = await fetch('/api/profile', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({
               id: user.id,
               username: user.username,
@@ -1634,8 +1658,14 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
               bio: formData.bio
             })
           });
+
+          if (!profileRes.ok) {
+            const errorText = await profileRes.text();
+            throw new Error(errorText || 'Failed to update profile');
+          }
+
           const fullUser = await profileRes.json();
-          onLogin(fullUser);
+          onLogin({ ...fullUser, token });
         } catch (err: any) {
           alert(err.message);
         } finally {
