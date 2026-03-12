@@ -311,6 +311,11 @@ async function startServer() {
     res.json(messages);
   });
 
+  app.get('/api/users', (req, res) => {
+    const users = db.prepare('SELECT id, username, avatar_url, bio FROM users').all();
+    res.json(users);
+  });
+
   // Admin
   app.get('/api/admin/stats', (req, res) => {
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;

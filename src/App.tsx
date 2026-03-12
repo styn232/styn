@@ -27,6 +27,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { io } from 'socket.io-client';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -244,7 +245,7 @@ export default function App() {
       case 'home':
         return <HomeView setView={setView} user={user} />;
       case 'dating':
-        return <DatingView user={user} />;
+        return <DatingView user={user} setView={setView} />;
       case 'reels':
         return <ReelsView />;
       case 'chat':
@@ -566,7 +567,7 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
   );
 };
 
-const DatingView = ({ user }: { user: UserData | null }) => {
+const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: View) => void }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -615,7 +616,12 @@ const DatingView = ({ user }: { user: UserData | null }) => {
     <Heart size={64} className="text-white/10 mb-6" />
     <h2 className="text-3xl font-black tracking-tighter mb-2">FIND YOUR MATCH</h2>
     <p className="text-white/50 max-w-xs mb-8">Join STYN Social & Dating to connect with people who share your interests.</p>
-    <button className="bg-white text-black px-8 py-3 rounded-full font-bold">Get Started</button>
+    <button 
+      onClick={() => setView('auth')}
+      className="bg-white text-black px-8 py-3 rounded-full font-bold hover:scale-105 transition-all"
+    >
+      Get Started
+    </button>
   </div>;
 
   if (loading) return <div className="flex items-center justify-center h-[80vh]">Calculating compatibility...</div>;
@@ -698,11 +704,27 @@ const ReelsView = () => {
   const [showUpload, setShowUpload] = useState(false);
   const [reelContent, setReelContent] = useState('');
   const [reelMedia, setReelMedia] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReelMedia(reader.result as string);
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleUpload = async () => {
     const savedUser = localStorage.getItem('styn_user');
     if (!savedUser) return alert('Please login to upload');
     const user = JSON.parse(savedUser);
+
+    if (!reelMedia) return alert('Please select a file first');
 
     await fetch('/api/posts', {
       method: 'POST',
@@ -710,11 +732,13 @@ const ReelsView = () => {
       body: JSON.stringify({
         user_id: user.id,
         content: reelContent,
-        media_url: reelMedia || 'https://picsum.photos/seed/reel/1080/1920',
+        media_url: reelMedia,
         type: 'reel'
       })
     });
     setShowUpload(false);
+    setReelContent('');
+    setReelMedia('');
     alert('Reel uploaded successfully!');
   };
 
@@ -738,13 +762,35 @@ const ReelsView = () => {
                 value={reelContent}
                 onChange={e => setReelContent(e.target.value)}
               />
-              <input 
-                type="text" 
-                placeholder="Media URL (Image/Video)" 
-                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:border-brand"
-                value={reelMedia}
-                onChange={e => setReelMedia(e.target.value)}
-              />
+              
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="video/*,image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="reel-upload"
+                />
+                <label 
+                  htmlFor="reel-upload"
+                  className="w-full bg-white/5 border border-dashed border-white/20 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-brand transition-all"
+                >
+                  {uploading ? (
+                    <span className="text-xs font-bold animate-pulse">Processing...</span>
+                  ) : reelMedia ? (
+                    <div className="text-center">
+                      <span className="text-emerald-400 text-xs font-bold block mb-2">File Ready</span>
+                      <span className="text-[10px] text-white/40 truncate max-w-[200px] block">Media loaded successfully</span>
+                    </div>
+                  ) : (
+                    <>
+                      <PlusSquare size={32} className="text-white/20 mb-2" />
+                      <span className="text-xs font-bold text-white/40">Select Video or Photo</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
               <div className="flex gap-4 pt-4">
                 <button 
                   onClick={() => setShowUpload(false)}
@@ -754,7 +800,8 @@ const ReelsView = () => {
                 </button>
                 <button 
                   onClick={handleUpload}
-                  className="flex-1 px-6 py-3 rounded-2xl bg-brand text-black font-black uppercase tracking-widest text-xs"
+                  disabled={uploading || !reelMedia}
+                  className="flex-1 px-6 py-3 rounded-2xl bg-brand text-black font-black uppercase tracking-widest text-xs disabled:opacity-50"
                 >
                   Post Reel
                 </button>
@@ -829,12 +876,77 @@ const ReelsView = () => {
 };
 
 const ChatView = ({ user }: { user: UserData | null }) => {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState('');
+  const [activeChat, setActiveChat] = useState<any>(null);
+  const [socket, setSocket] = useState<any>(null);
+
+  useEffect(() => {
+    if (user) {
+      const newSocket = io();
+      setSocket(newSocket);
+      newSocket.emit('join', user.id);
+
+      newSocket.on('receive_message', (msg: any) => {
+        if (activeChat && (msg.sender_id === activeChat.id || msg.receiver_id === activeChat.id)) {
+          setMessages(prev => {
+            // Prevent duplicates
+            if (prev.some(m => m.created_at === msg.created_at && m.content === msg.content)) return prev;
+            return [...prev, msg];
+          });
+        }
+      });
+
+      return () => newSocket.close();
+    }
+  }, [user, activeChat]);
+
+  useEffect(() => {
+    if (user && activeChat) {
+      fetch(`/api/messages/${user.id}/${activeChat.id}`)
+        .then(res => res.json())
+        .then(data => setMessages(data));
+    }
+  }, [user, activeChat]);
+
+  const sendMessage = () => {
+    if (!input.trim() || !activeChat || !socket) return;
+
+    const msgData = {
+      sender_id: user?.id,
+      receiver_id: activeChat.id,
+      content: input,
+      created_at: new Date().toISOString()
+    };
+
+    socket.emit('send_message', msgData);
+    setMessages(prev => [...prev, msgData]);
+    setInput('');
+  };
+
+  const [friends, setFriends] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/users')
+      .then(res => res.json())
+      .then(data => {
+        if (user) {
+          setFriends(data.filter((f: any) => f.id !== user.id));
+        } else {
+          setFriends(data);
+        }
+      });
+  }, [user]);
+
   if (!user) return <div className="flex items-center justify-center h-[80vh]">Please login to chat.</div>;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 h-[calc(100vh-4rem)] flex gap-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 h-[calc(100vh-4rem)] flex flex-col lg:flex-row gap-8">
       {/* Sidebar */}
-      <div className="w-80 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5">
+      <div className={cn(
+        "w-full lg:w-80 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5",
+        activeChat ? "hidden lg:flex" : "flex"
+      )}>
         <div className="p-6 border-b border-white/10">
           <h3 className="text-xl font-black tracking-tighter mb-4">MESSAGES</h3>
           <div className="relative">
@@ -847,18 +959,25 @@ const ChatView = ({ user }: { user: UserData | null }) => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {[1, 2, 3, 4, 5].map(i => (
-            <button key={i} className="w-full flex items-center gap-3 p-4 rounded-2xl hover:bg-white/5 transition-all text-left group">
+          {friends.map(friend => (
+            <button 
+              key={friend.id} 
+              onClick={() => setActiveChat(friend)}
+              className={cn(
+                "w-full flex items-center gap-3 p-4 rounded-2xl transition-all text-left group",
+                activeChat?.id === friend.id ? "bg-brand text-black" : "hover:bg-white/5"
+              )}
+            >
               <div className="relative">
-                <div className="w-12 h-12 rounded-full bg-white/10" />
+                <img src={friend.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover" />
                 <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#050505]" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center mb-1">
-                  <p className="font-bold text-sm truncate">Friend Name {i}</p>
-                  <span className="text-[10px] text-white/30">12:45</span>
+                  <p className="font-bold text-sm truncate">{friend.username}</p>
+                  <span className={cn("text-[10px]", activeChat?.id === friend.id ? "text-black/40" : "text-white/30")}>12:45</span>
                 </div>
-                <p className="text-xs text-white/50 truncate">Hey, did you see that new reel?</p>
+                <p className={cn("text-xs truncate", activeChat?.id === friend.id ? "text-black/60" : "text-white/50")}>Hey, did you see that new reel?</p>
               </div>
             </button>
           ))}
@@ -866,43 +985,65 @@ const ChatView = ({ user }: { user: UserData | null }) => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5">
-        <div className="p-6 border-b border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/10" />
-            <div>
-              <p className="font-bold text-sm">Friend Name 1</p>
-              <p className="text-[10px] text-brand uppercase tracking-widest">Online</p>
+      <div className={cn(
+        "flex-1 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5",
+        !activeChat ? "hidden lg:flex items-center justify-center" : "flex"
+      )}>
+        {activeChat ? (
+          <>
+            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setActiveChat(null)} className="lg:hidden p-2 -ml-2 text-white/50">
+                  <X size={20} />
+                </button>
+                <img src={activeChat.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                <div>
+                  <p className="font-bold text-sm">{activeChat.username}</p>
+                  <p className="text-[10px] text-brand uppercase tracking-widest">Online</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <button className="text-white/50 hover:text-white"><Settings size={20} /></button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="text-white/50 hover:text-white"><Settings size={20} /></button>
-          </div>
-        </div>
-        <div className="flex-1 p-6 space-y-4 overflow-y-auto">
-          <div className="flex justify-start">
-            <div className="bg-white/10 rounded-2xl rounded-tl-none p-4 max-w-[70%]">
-              <p className="text-sm">Hey! How are you doing today?</p>
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+              {messages.map((msg, i) => (
+                <div key={i} className={cn("flex", msg.sender_id === user?.id ? "justify-end" : "justify-start")}>
+                  <div className={cn(
+                    "rounded-2xl p-4 max-w-[70%] text-sm",
+                    msg.sender_id === user?.id ? "bg-brand text-black rounded-tr-none" : "bg-white/10 text-white rounded-tl-none"
+                  )}>
+                    <p>{msg.content}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="flex justify-end">
-            <div className="bg-brand text-black rounded-2xl rounded-tr-none p-4 max-w-[70%]">
-              <p className="text-sm font-medium">I\'m doing great! Just exploring the new STYN app. It\'s pretty cool!</p>
+            <div className="p-6 border-t border-white/10">
+              <div className="flex gap-4">
+                <input 
+                  type="text" 
+                  placeholder="Type a message..." 
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && sendMessage()}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-sm focus:outline-none focus:border-white/30"
+                />
+                <button 
+                  onClick={sendMessage}
+                  className="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center hover:scale-105 transition-all"
+                >
+                  <Send size={20} />
+                </button>
+              </div>
             </div>
+          </>
+        ) : (
+          <div className="text-center p-12">
+            <MessageSquare size={64} className="text-white/10 mx-auto mb-6" />
+            <h3 className="text-2xl font-black tracking-tighter mb-2">YOUR MESSAGES</h3>
+            <p className="text-white/40 max-w-xs mx-auto">Select a friend from the sidebar to start a real-time conversation.</p>
           </div>
-        </div>
-        <div className="p-6 border-t border-white/10">
-          <div className="flex gap-4">
-            <input 
-              type="text" 
-              placeholder="Type a message..." 
-              className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-sm focus:outline-none focus:border-white/30"
-            />
-            <button className="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center hover:scale-105 transition-all">
-              <Send size={20} />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -984,12 +1125,21 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
               <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                 <PlusSquare size={24} />
                 <input 
-                  type="text" 
+                  type="file" 
+                  accept="image/*"
                   className="hidden" 
-                  placeholder="Avatar URL" 
-                  onChange={e => setEditData({...editData, avatar_url: e.target.value})} 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setEditData({...editData, avatar_url: reader.result as string});
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }} 
                 />
-                <span className="text-[10px] font-bold uppercase ml-2">URL</span>
+                <span className="text-[10px] font-bold uppercase ml-2">Upload</span>
               </label>
             )}
           </div>
