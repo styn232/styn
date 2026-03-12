@@ -181,6 +181,33 @@ db.exec(`
     location TEXT, -- 'South Africa', 'Zimbabwe'
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    description TEXT,
+    avatar_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS user_groups (
+    user_id INTEGER,
+    group_id INTEGER,
+    role TEXT DEFAULT 'member', -- 'admin', 'member'
+    PRIMARY KEY(user_id, group_id),
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(group_id) REFERENCES groups(id)
+  );
+
+  -- Performance Indexes
+  CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_receiver_read ON messages(receiver_id, is_read);
+  CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
+  CREATE INDEX IF NOT EXISTS idx_posts_type ON posts(type);
+  CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+  CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+  CREATE INDEX IF NOT EXISTS idx_user_activity_user_id ON user_activity(user_id);
+  CREATE INDEX IF NOT EXISTS idx_matches_users ON matches(user1_id, user2_id);
 `);
 
 // --- HELPERS ---
@@ -605,7 +632,7 @@ async function startServer() {
     if (type) {
       query += ` AND posts.type = ?`;
     }
-    query += ` ORDER BY posts.created_at DESC`;
+    query += ` ORDER BY posts.created_at DESC LIMIT 50`;
     
     const posts = type ? db.prepare(query).all(type) : db.prepare(query).all();
     
@@ -778,8 +805,20 @@ async function startServer() {
     res.json(messages);
   });
 
+  app.get('/api/chat/counts/:userId', (req, res) => {
+    const userId = req.params.userId;
+    try {
+      const unreadCount = db.prepare('SELECT COUNT(*) as count FROM messages WHERE receiver_id = ? AND is_read = 0').get(userId).count;
+      const groupCount = db.prepare('SELECT COUNT(*) as count FROM user_groups WHERE user_id = ?').get(userId).count;
+      const favoritesCount = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(userId).count;
+      res.json({ unread: unreadCount, groups: groupCount, favorites: favoritesCount });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch counts' });
+    }
+  });
+
   app.get('/api/users', (req, res) => {
-    const users = db.prepare('SELECT id, username, avatar_url, bio FROM users').all();
+    const users = db.prepare('SELECT id, username, avatar_url, bio, location, points, level FROM users WHERE is_banned = 0').all();
     res.json(users);
   });
 

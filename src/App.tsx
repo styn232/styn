@@ -30,6 +30,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { io } from 'socket.io-client';
+import { FilterMenu } from './components/FilterMenu';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -1160,6 +1161,16 @@ const ChatView = ({ user }: { user: UserData | null }) => {
   const [input, setInput] = useState('');
   const [activeChat, setActiveChat] = useState<any>(null);
   const [socket, setSocket] = useState<any>(null);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [counts, setCounts] = useState({ unread: 0, groups: 0, favorites: 0 });
+
+  useEffect(() => {
+    if (user) {
+      fetch(`/api/chat/counts/${user.id}`)
+        .then(res => res.json())
+        .then(data => setCounts(data));
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -1218,17 +1229,39 @@ const ChatView = ({ user }: { user: UserData | null }) => {
       });
   }, [user]);
 
+  const filteredFriends = useMemo(() => {
+    if (activeFilter === 'all') return friends;
+    if (activeFilter === 'unread') return friends.filter(f => f.unreadCount > 0);
+    // For groups and favorites, we'd need more complex logic or data. 
+    // For now, let's just show all or a subset if we had the data.
+    return friends;
+  }, [friends, activeFilter]);
+
   if (!user) return <div className="flex items-center justify-center h-[80vh]">Please login to chat.</div>;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 h-[calc(100vh-4rem)] flex flex-col lg:flex-row gap-8">
       {/* Sidebar */}
       <div className={cn(
-        "w-full lg:w-80 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5",
+        "w-full lg:w-96 border border-white/10 rounded-3xl overflow-hidden flex flex-col bg-white/5",
         activeChat ? "hidden lg:flex" : "flex"
       )}>
         <div className="p-6 border-b border-white/10">
           <h3 className="text-xl font-black tracking-tighter mb-4">MESSAGES</h3>
+          
+          <FilterMenu 
+            className="mb-6"
+            activeTab={activeFilter}
+            onTabChange={setActiveFilter}
+            onAddClick={() => alert('New Message/Group Action')}
+            tabs={[
+              { id: 'all', label: 'All' },
+              { id: 'unread', label: 'Unread', count: counts.unread },
+              { id: 'favorites', label: 'Favourites', count: counts.favorites },
+              { id: 'groups', label: 'Groups', count: counts.groups },
+            ]}
+          />
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={16} />
             <input 
@@ -1239,7 +1272,7 @@ const ChatView = ({ user }: { user: UserData | null }) => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {friends.map(friend => (
+          {filteredFriends.map(friend => (
             <button 
               key={friend.id} 
               onClick={() => setActiveChat(friend)}
