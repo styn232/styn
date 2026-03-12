@@ -26,8 +26,37 @@ db.exec(`
     points INTEGER DEFAULT 0,
     level TEXT DEFAULT 'Bronze',
     is_super_admin INTEGER DEFAULT 0,
+    age INTEGER,
+    gender TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- Add columns if they don't exist (for existing databases)
+  PRAGMA foreign_keys=off;
+  BEGIN TRANSACTION;
+  CREATE TABLE IF NOT EXISTS users_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    email TEXT UNIQUE,
+    password TEXT,
+    phone TEXT,
+    bio TEXT,
+    location TEXT,
+    avatar_url TEXT,
+    interests TEXT,
+    points INTEGER DEFAULT 0,
+    level TEXT DEFAULT 'Bronze',
+    is_super_admin INTEGER DEFAULT 0,
+    age INTEGER,
+    gender TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  INSERT OR IGNORE INTO users_new (id, username, email, password, phone, bio, location, avatar_url, interests, points, level, is_super_admin, created_at)
+  SELECT id, username, email, password, phone, bio, location, avatar_url, interests, points, level, is_super_admin, created_at FROM users;
+  DROP TABLE users;
+  ALTER TABLE users_new RENAME TO users;
+  COMMIT;
+  PRAGMA foreign_keys=on;
 
   CREATE TABLE IF NOT EXISTS ads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,9 +243,9 @@ async function startServer() {
 
   // User Profile & Social
   app.put('/api/profile', (req, res) => {
-    const { id, username, bio, avatar_url, interests } = req.body;
+    const { id, username, bio, avatar_url, interests, age, gender, location } = req.body;
     try {
-      db.prepare('UPDATE users SET username = ?, bio = ?, avatar_url = ?, interests = ? WHERE id = ?').run(username, bio, avatar_url, interests, id);
+      db.prepare('UPDATE users SET username = ?, bio = ?, avatar_url = ?, interests = ?, age = ?, gender = ?, location = ? WHERE id = ?').run(username, bio, avatar_url, interests, age, gender, location, id);
       const updatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
       res.json(updatedUser);
     } catch (err) {

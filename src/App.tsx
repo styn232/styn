@@ -46,6 +46,9 @@ interface UserData {
   bio?: string;
   interests?: string;
   is_super_admin?: number;
+  age?: number;
+  gender?: string;
+  location?: string;
 }
 
 // --- Components ---
@@ -286,12 +289,15 @@ export default function App() {
       </main>
       
       {/* Admin Quick Access (Demo Only) */}
-      <button 
-        onClick={() => setView('admin')}
-        className="fixed bottom-20 lg:bottom-4 right-4 w-10 h-10 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white/20 hover:text-white hover:bg-white/10 transition-all z-50"
-      >
-        <Settings size={16} />
-      </button>
+      {user?.is_super_admin === 1 && (
+        <button 
+          onClick={() => setView('admin')}
+          className="fixed bottom-20 lg:bottom-4 right-4 bg-brand text-black px-4 py-2 rounded-full flex items-center justify-center gap-2 hover:scale-105 transition-all z-50 font-black text-[10px] uppercase tracking-widest shadow-xl"
+        >
+          <Settings size={14} />
+          Admin Panel
+        </button>
+      )}
     </div>
   );
 }
@@ -1105,7 +1111,10 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
     username: user?.username || '',
     bio: user?.bio || '',
     interests: user?.interests || '',
-    avatar_url: user?.avatar_url || ''
+    avatar_url: user?.avatar_url || '',
+    age: user?.age || '',
+    gender: user?.gender || '',
+    location: user?.location || ''
   });
 
   if (!user) return null;
@@ -1178,6 +1187,32 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
                 placeholder="Interests (comma separated)"
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-xs focus:border-brand outline-none"
               />
+              <div className="grid grid-cols-2 gap-4">
+                <input 
+                  type="number" 
+                  value={editData.age} 
+                  onChange={e => setEditData({...editData, age: parseInt(e.target.value) || ''})}
+                  placeholder="Age"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-xs focus:border-brand outline-none"
+                />
+                <select 
+                  value={editData.gender} 
+                  onChange={e => setEditData({...editData, gender: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-xs focus:border-brand outline-none appearance-none"
+                >
+                  <option value="" className="bg-zinc-900">Gender</option>
+                  <option value="Male" className="bg-zinc-900">Male</option>
+                  <option value="Female" className="bg-zinc-900">Female</option>
+                  <option value="Other" className="bg-zinc-900">Other</option>
+                </select>
+              </div>
+              <input 
+                type="text" 
+                value={editData.location} 
+                onChange={e => setEditData({...editData, location: e.target.value})}
+                placeholder="Location"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center text-xs focus:border-brand outline-none"
+              />
               <div className="flex gap-4">
                 <button onClick={() => setIsEditing(false)} className="flex-1 py-2 rounded-xl border border-white/10 font-bold text-xs uppercase tracking-widest">Cancel</button>
                 <button onClick={handleSave} className="flex-1 py-2 rounded-xl bg-brand text-black font-black text-xs uppercase tracking-widest">Save Changes</button>
@@ -1191,7 +1226,12 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
                   <span className="bg-brand text-black text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Super Admin</span>
                 )}
               </div>
-              <p className="text-white/40 text-sm max-w-md mb-4">{user.bio || 'No bio yet.'}</p>
+              <p className="text-white/40 text-sm max-w-md mb-2">{user.bio || 'No bio yet.'}</p>
+              <div className="flex gap-4 text-[10px] uppercase font-bold tracking-widest text-white/30 mb-4">
+                {user.age && <span>{user.age} Years Old</span>}
+                {user.gender && <span>{user.gender}</span>}
+                {user.location && <span>{user.location}</span>}
+              </div>
               <p className="text-brand font-mono text-xs md:text-sm uppercase tracking-[0.3em] mb-8">{user.level} LEVEL • {user.points} POINTS</p>
               <button 
                 onClick={() => setIsEditing(true)}
@@ -1235,70 +1275,206 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
 
 const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ username: '', email: '', password: '' });
+  const [step, setStep] = useState(1); // 1: Auth, 2: Profile Details
+  const [formData, setFormData] = useState({ 
+    username: '', 
+    email: '', 
+    password: '',
+    age: '',
+    gender: '',
+    location: '',
+    bio: ''
+  });
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock login/signup
-    onLogin({
-      id: 1,
-      username: formData.username || formData.email.split('@')[0],
-      email: formData.email,
-      points: 100,
-      level: 'Bronze'
-    });
+    setLoading(true);
+    
+    if (isLogin) {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: formData.email, password: formData.password })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        onLogin(data);
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (step === 1) {
+        setStep(2);
+        setLoading(false);
+      } else {
+        try {
+          const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              username: formData.username, 
+              email: formData.email, 
+              password: formData.password 
+            })
+          });
+          const user = await res.json();
+          if (user.error) throw new Error(user.error);
+
+          // Update profile with extra details
+          const profileRes = await fetch('/api/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: user.id,
+              username: user.username,
+              age: parseInt(formData.age),
+              gender: formData.gender,
+              location: formData.location,
+              bio: formData.bio
+            })
+          });
+          const fullUser = await profileRes.json();
+          onLogin(fullUser);
+        } catch (err: any) {
+          alert(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
   };
 
   return (
     <div className="max-w-md mx-auto px-4 py-24">
       <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10">
-        <h2 className="text-4xl font-black tracking-tighter mb-2 text-center">{isLogin ? 'WELCOME BACK' : 'JOIN STYN'}</h2>
-        <p className="text-white/40 text-center mb-10 text-sm">Enter your details to continue your journey.</p>
+        <h2 className="text-4xl font-black tracking-tighter mb-2 text-center">
+          {isLogin ? 'WELCOME BACK' : step === 1 ? 'JOIN STYN' : 'COMPLETE PROFILE'}
+        </h2>
+        <p className="text-white/40 text-center mb-10 text-sm">
+          {isLogin ? 'Enter your details to continue.' : step === 1 ? 'Start your journey with us.' : 'Tell us a bit more about yourself.'}
+        </p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Username</label>
-              <input 
-                type="text" 
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
-                placeholder="Choose a unique handle"
-                value={formData.username}
-                onChange={e => setFormData({...formData, username: e.target.value})}
-              />
-            </div>
+          {isLogin || step === 1 ? (
+            <>
+              {!isLogin && (
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Username</label>
+                  <input 
+                    type="text" 
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                    placeholder="Choose a unique handle"
+                    value={formData.username}
+                    onChange={e => setFormData({...formData, username: e.target.value})}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Email Address</label>
+                <input 
+                  type="email" 
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                  placeholder="name@example.com"
+                  value={formData.email}
+                  onChange={e => setFormData({...formData, email: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Password</label>
+                <input 
+                  type="password" 
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Age</label>
+                  <input 
+                    type="number" 
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                    placeholder="24"
+                    value={formData.age}
+                    onChange={e => setFormData({...formData, age: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Gender</label>
+                  <select 
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30 appearance-none"
+                    value={formData.gender}
+                    onChange={e => setFormData({...formData, gender: e.target.value})}
+                  >
+                    <option value="" className="bg-zinc-900">Select</option>
+                    <option value="Male" className="bg-zinc-900">Male</option>
+                    <option value="Female" className="bg-zinc-900">Female</option>
+                    <option value="Other" className="bg-zinc-900">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Location</label>
+                <input 
+                  type="text" 
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
+                  placeholder="City, Country"
+                  value={formData.location}
+                  onChange={e => setFormData({...formData, location: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Biography</label>
+                <textarea 
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30 h-32"
+                  placeholder="Tell us about yourself..."
+                  value={formData.bio}
+                  onChange={e => setFormData({...formData, bio: e.target.value})}
+                />
+              </div>
+            </>
           )}
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Email Address</label>
-            <input 
-              type="email" 
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
-              placeholder="name@example.com"
-              value={formData.email}
-              onChange={e => setFormData({...formData, email: e.target.value})}
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-4 mb-2 block">Password</label>
-            <input 
-              type="password" 
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-white/30"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={e => setFormData({...formData, password: e.target.value})}
-            />
-          </div>
-          <button type="submit" className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase tracking-widest mt-6 hover:scale-[1.02] transition-all">
-            {isLogin ? 'Sign In' : 'Create Account'}
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-white text-black py-4 rounded-2xl font-black uppercase tracking-widest mt-6 hover:scale-[1.02] transition-all disabled:opacity-50"
+          >
+            {loading ? 'Processing...' : isLogin ? 'Sign In' : step === 1 ? 'Next Step' : 'Complete Signup'}
           </button>
+          
+          {!isLogin && step === 2 && (
+            <button 
+              type="button"
+              onClick={() => setStep(1)}
+              className="w-full text-xs text-white/40 hover:text-white transition-colors mt-2"
+            >
+              Back to account details
+            </button>
+          )}
         </form>
 
         <div className="mt-8 text-center">
           <button 
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setStep(1);
+            }}
             className="text-xs text-white/40 hover:text-white transition-colors"
           >
             {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
