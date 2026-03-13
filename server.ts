@@ -314,51 +314,21 @@ const seedData = () => {
     adminId = superAdmin.id;
   }
 
-  // Add some reels for Super Admin
-  const reelCount = db.prepare("SELECT COUNT(*) as count FROM posts WHERE type = 'reel'").get().count;
-  if (reelCount < 5) {
-    const sampleReels = [
-      ['Vibrant Cape Town Streets 🇿🇦', 'https://picsum.photos/seed/sa_reel1/1080/1920'],
-      ['Sunset at Victoria Falls 🇿🇼', 'https://picsum.photos/seed/zim_reel1/1080/1920'],
-      ['Johannesburg Nightlife Vibes', 'https://picsum.photos/seed/sa_reel2/1080/1920'],
-      ['Traditional Dance in Harare', 'https://picsum.photos/seed/zim_reel2/1080/1920'],
-      ['Wildlife Safari Highlights', 'https://picsum.photos/seed/sa_reel3/1080/1920']
-    ];
-    sampleReels.forEach(([content, url]) => {
-      db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
-        adminId, content, url, 'reel'
-      );
-    });
-  }
-
-  // Seed 10 South African Profiles
-  const saProfilesCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE location LIKE '%South Africa%'").get().count;
-  if (saProfilesCount < 10) {
-    const saGirls = [
-      ['Zanele M.', 'zanele@styn.sa', 'Cape Town, South Africa', 'Fashion, Design, Music'],
-      ['Lerato K.', 'lerato@styn.sa', 'Johannesburg, South Africa', 'Tech, Entrepreneurship, Travel'],
-      ['Nomvula S.', 'nomvula@styn.sa', 'Durban, South Africa', 'Surfing, Yoga, Nature'],
-      ['Thandiwe B.', 'thandi@styn.sa', 'Pretoria, South Africa', 'Politics, Law, Reading'],
-      ['Buhle X.', 'buhle@styn.sa', 'Soweto, South Africa', 'Dance, Community, Art'],
-      ['Aphiwe N.', 'aphiwe@styn.sa', 'Port Elizabeth, South Africa', 'Marine Biology, Photography'],
-      ['Mbali R.', 'mbali@styn.sa', 'Bloemfontein, South Africa', 'Agriculture, Cooking, Family'],
-      ['Nandi G.', 'nandi@styn.sa', 'East London, South Africa', 'Poetry, Jazz, History'],
-      ['Siphesihle W.', 'siphe@styn.sa', 'Mbombela, South Africa', 'Wildlife, Conservation, Hiking'],
-      ['Khanyisile T.', 'khanyi@styn.sa', 'Polokwane, South Africa', 'Education, Sports, Fitness']
-    ];
-
-    saGirls.forEach(([name, email, loc, interests]) => {
-      db.prepare(`
-        INSERT INTO users (username, email, password, location, interests, bio, avatar_url, gender, age) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        name, email, 'password123', loc, interests, 
-        `Proudly South African 🇿🇦. Interested in ${interests}.`,
-        `https://picsum.photos/seed/${name.replace(' ', '')}/400/400`,
-        'Female', Math.floor(Math.random() * 10) + 20
-      );
-    });
-  }
+  // Cleanup old demo data if it exists
+  const demoEmails = [
+    'zanele@styn.sa', 'lerato@styn.sa', 'nomvula@styn.sa', 'thandi@styn.sa', 
+    'buhle@styn.sa', 'aphiwe@styn.sa', 'mbali@styn.sa', 'nandi@styn.sa', 
+    'siphe@styn.sa', 'khanyi@styn.sa'
+  ];
+  const placeholders = demoEmails.map(() => '?').join(',');
+  db.prepare(`DELETE FROM posts WHERE user_id IN (SELECT id FROM users WHERE email IN (${placeholders}))`).run(...demoEmails);
+  db.prepare(`DELETE FROM users WHERE email IN (${placeholders})`).run(...demoEmails);
+  // Also delete super admin's demo reels
+  db.prepare("DELETE FROM posts WHERE user_id = ? AND type = 'reel' AND content LIKE '%Vibrant Cape Town%'").run(adminId);
+  db.prepare("DELETE FROM posts WHERE user_id = ? AND type = 'reel' AND content LIKE '%Sunset at Victoria%'").run(adminId);
+  db.prepare("DELETE FROM posts WHERE user_id = ? AND type = 'reel' AND content LIKE '%Johannesburg Nightlife%'").run(adminId);
+  db.prepare("DELETE FROM posts WHERE user_id = ? AND type = 'reel' AND content LIKE '%Traditional Dance%'").run(adminId);
+  db.prepare("DELETE FROM posts WHERE user_id = ? AND type = 'reel' AND content LIKE '%Wildlife Safari%'").run(adminId);
 
   // Seed News
   const newsCount = db.prepare('SELECT COUNT(*) as count FROM news').get().count;
@@ -568,18 +538,25 @@ async function startServer() {
   // Posts & Reels
   app.get('/api/posts', (req, res) => {
     const type = req.query.type;
+    const userId = req.query.user_id;
     let query = `
       SELECT posts.*, users.username, users.avatar_url 
       FROM posts 
       JOIN users ON posts.user_id = users.id 
       WHERE posts.is_deleted = 0
     `;
+    const params: any[] = [];
     if (type) {
       query += ` AND posts.type = ?`;
+      params.push(type);
+    }
+    if (userId) {
+      query += ` AND posts.user_id = ?`;
+      params.push(userId);
     }
     query += ` ORDER BY posts.created_at DESC LIMIT 50`;
     
-    const posts = type ? db.prepare(query).all(type) : db.prepare(query).all();
+    const posts = db.prepare(query).all(...params);
     
     // Add comments and like status for each post
     const postsWithDetails = posts.map(post => {

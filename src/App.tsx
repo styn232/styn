@@ -25,7 +25,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  UserPlus
+  UserPlus,
+  Layout
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
@@ -1843,6 +1844,8 @@ const ProfileView = ({ user, onUpdateUser, targetUserId, onBack }: { user: UserD
   const [stats, setStats] = useState({ followers: 0, following: 0, posts: 0 });
   const [targetUser, setTargetUser] = useState<any>(null);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
   const [editData, setEditData] = useState({
     username: user?.username || '',
     first_name: user?.first_name || '',
@@ -1885,6 +1888,18 @@ const ProfileView = ({ user, onUpdateUser, targetUserId, onBack }: { user: UserD
             location: data.location || ''
           });
         }
+      });
+
+      setLoadingPosts(true);
+      fetch(`/api/posts?user_id=${fetchId}`)
+      .then(res => res.json())
+      .then(data => {
+        setUserPosts(data);
+        setLoadingPosts(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoadingPosts(false);
       });
     }
   }, [user, targetUserId]);
@@ -2107,6 +2122,58 @@ const ProfileView = ({ user, onUpdateUser, targetUserId, onBack }: { user: UserD
               Rewards
             </button>
           </div>
+        </div>
+
+        {/* User's Wall */}
+        <div className="mt-12 space-y-6">
+          <h3 className="text-xl font-black tracking-tighter uppercase mb-6 flex items-center gap-2">
+            <Layout size={20} className="text-brand" />
+            User Wall
+          </h3>
+          
+          {loadingPosts ? (
+            <div className="flex justify-center py-12">
+              <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : userPosts.length > 0 ? (
+            <div className="grid gap-6">
+              {userPosts.map(post => (
+                <div key={post.id} className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden group transition-all hover:border-white/20 p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <img src={post.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    <div>
+                      <p className="font-bold text-xs">@{post.username}</p>
+                      <p className="text-[10px] text-white/40">{new Date(post.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm mb-4">{post.content}</p>
+                  {post.media_url && (
+                    <div className="rounded-2xl overflow-hidden bg-black/20 border border-white/5 aspect-video mb-4">
+                      {post.media_url.startsWith('data:video') || post.media_url.endsWith('.mp4') || post.media_url.includes('video') ? (
+                        <video src={post.media_url} className="w-full h-full object-cover" controls playsInline />
+                      ) : (
+                        <img src={post.media_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      <Heart size={14} />
+                      {post.likes_count || 0}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      <MessageSquare size={14} />
+                      {post.comments?.length || 0}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white/5 rounded-3xl border border-dashed border-white/10">
+              <p className="text-white/40 text-sm">No posts yet.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
