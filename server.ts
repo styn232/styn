@@ -487,12 +487,14 @@ async function startServer() {
     const isFollowing = db.prepare('SELECT * FROM follows WHERE follower_id = ? AND following_id = ?').get(req.user.id, req.params.id);
     const followersCount = db.prepare('SELECT COUNT(*) as count FROM follows WHERE following_id = ?').get(req.params.id).count;
     const followingCount = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(req.params.id).count;
+    const postsCount = db.prepare('SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND is_deleted = 0').get(req.params.id).count;
     
     res.json({ 
       ...user, 
       isFollowing: !!isFollowing,
       followersCount,
-      followingCount
+      followingCount,
+      postsCount
     });
   });
 
@@ -512,18 +514,18 @@ async function startServer() {
 
   app.get('/api/ads', (req, res) => {
     const placement = req.query.placement || 'home';
-    const ads = db.prepare('SELECT * FROM ads WHERE status = "active" AND placement = ? ORDER BY RANDOM() LIMIT 1').all(placement);
+    const ads = db.prepare("SELECT * FROM ads WHERE status = 'active' AND placement = ? ORDER BY RANDOM() LIMIT 1").all(placement);
     res.json(ads);
   });
 
   // Admin Endpoints
   app.get('/api/admin/stats', authenticateToken, adminOnly, (req: any, res: any) => {
     const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-    const newUsersToday = db.prepare('SELECT COUNT(*) as count FROM users WHERE date(created_at) = date("now")').get().count;
-    const totalPosts = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "post"').get().count;
-    const totalReels = db.prepare('SELECT COUNT(*) as count FROM posts WHERE type = "reel"').get().count;
+    const newUsersToday = db.prepare("SELECT COUNT(*) as count FROM users WHERE date(created_at) = date('now')").get().count;
+    const totalPosts = db.prepare("SELECT COUNT(*) as count FROM posts WHERE type = 'post'").get().count;
+    const totalReels = db.prepare("SELECT COUNT(*) as count FROM posts WHERE type = 'reel'").get().count;
     const totalMessages = db.prepare('SELECT COUNT(*) as count FROM messages').get().count;
-    const activeUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE date(last_login) = date("now")').get().count;
+    const activeUsers = db.prepare("SELECT COUNT(*) as count FROM users WHERE date(last_login) = date('now')").get().count;
     const topUsers = db.prepare('SELECT username, points FROM users ORDER BY points DESC LIMIT 5').all();
     const adRevenue = db.prepare('SELECT SUM(revenue) as total FROM ads').get().total || 0;
     
@@ -546,130 +548,6 @@ async function startServer() {
   app.get('/api/admin/users', authenticateToken, adminOnly, (req: any, res: any) => {
     const users = db.prepare('SELECT * FROM users').all();
     res.json(users);
-  });
-
-  app.put('/api/admin/users/:id', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { username, email, is_verified, is_banned, is_super_admin } = req.body;
-    db.prepare('UPDATE users SET username = ?, email = ?, is_verified = ?, is_banned = ?, is_super_admin = ? WHERE id = ?')
-      .run(username, email, is_verified ? 1 : 0, is_banned ? 1 : 0, is_super_admin ? 1 : 0, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.delete('/api/admin/users/:id', authenticateToken, adminOnly, (req: any, res: any) => {
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-  });
-
-  app.post('/api/admin/users/ban', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { user_id, reason } = req.body;
-    db.prepare('UPDATE users SET is_banned = 1 WHERE id = ?').run(user_id);
-    res.json({ success: true });
-  });
-
-  app.get('/api/admin/posts', authenticateToken, adminOnly, (req: any, res: any) => {
-    const posts = db.prepare('SELECT posts.*, users.username FROM posts JOIN users ON posts.user_id = users.id').all();
-    res.json(posts);
-  });
-
-  app.delete('/api/admin/posts/:id', authenticateToken, adminOnly, (req: any, res: any) => {
-    db.prepare('UPDATE posts SET is_deleted = 1 WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-  });
-
-  app.get('/api/admin/reports', authenticateToken, adminOnly, (req: any, res: any) => {
-    const reports = db.prepare('SELECT reports.*, users.username, posts.content as post_content FROM reports JOIN users ON reports.user_id = users.id JOIN posts ON reports.post_id = posts.id').all();
-    res.json(reports);
-  });
-
-  app.post('/api/admin/reports/resolve', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { report_id, status, delete_post } = req.body;
-    db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, report_id);
-    if (delete_post) {
-      const report = db.prepare('SELECT post_id FROM reports WHERE id = ?').get(report_id);
-      db.prepare('UPDATE posts SET is_deleted = 1 WHERE id = ?').run(report.post_id);
-    }
-    res.json({ success: true });
-  });
-
-  app.post('/api/admin/ads', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { title, media_url, link_url, placement } = req.body;
-    db.prepare('INSERT INTO ads (title, media_url, link_url, placement) VALUES (?, ?, ?, ?)').run(title, media_url, link_url, placement);
-    res.json({ success: true });
-  });
-
-  app.get('/api/admin/ads', authenticateToken, adminOnly, (req: any, res: any) => {
-    const ads = db.prepare('SELECT * FROM ads').all();
-    res.json(ads);
-  });
-
-  app.put('/api/admin/ads/:id', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { title, media_url, link_url, placement, status } = req.body;
-    db.prepare('UPDATE ads SET title = ?, media_url = ?, link_url = ?, placement = ?, status = ? WHERE id = ?')
-      .run(title, media_url, link_url, placement, status, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.delete('/api/admin/ads/:id', authenticateToken, adminOnly, (req: any, res: any) => {
-    db.prepare('DELETE FROM ads WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-  });
-
-  app.post('/api/admin/announcements', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { title, message } = req.body;
-    db.prepare('INSERT INTO announcements (title, message) VALUES (?, ?)').run(title, message);
-    res.json({ success: true });
-  });
-
-  app.get('/api/admin/announcements', (req, res) => {
-    const announcements = db.prepare('SELECT * FROM announcements WHERE status = "active" ORDER BY created_at DESC').all();
-    res.json(announcements);
-  });
-
-  app.post('/api/admin/mailing/send', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { subject, message } = req.body;
-    // Mock sending email to all users
-    const users = db.prepare('SELECT email FROM users').all();
-    console.log(`Sending email to ${users.length} users: ${subject}`);
-    res.json({ success: true, count: users.length });
-  });
-
-  app.post('/api/admin/games', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { title, description, game_url, thumbnail } = req.body;
-    db.prepare('INSERT INTO games (title, description, game_url, thumbnail) VALUES (?, ?, ?, ?)').run(title, description, game_url, thumbnail);
-    res.json({ success: true });
-  });
-
-  app.get('/api/games', (req, res) => {
-    const games = db.prepare('SELECT * FROM games').all();
-    res.json(games);
-  });
-
-  app.post('/api/admin/ban-ip', authenticateToken, adminOnly, (req: any, res: any) => {
-    const { ip_address, reason } = req.body;
-    db.prepare('INSERT INTO banned_ips (ip_address, reason) VALUES (?, ?)').run(ip_address, reason);
-    res.json({ success: true });
-  });
-
-  app.get('/api/admin/banned-ips', authenticateToken, adminOnly, (req: any, res: any) => {
-    const ips = db.prepare('SELECT * FROM banned_ips').all();
-    res.json(ips);
-  });
-
-  app.get('/api/admin/settings', authenticateToken, adminOnly, (req: any, res: any) => {
-    const settings = db.prepare('SELECT * FROM site_settings').all();
-    const settingsObj = settings.reduce((acc: any, curr: any) => {
-      acc[curr.key] = curr.value;
-      return acc;
-    }, {});
-    res.json(settingsObj);
-  });
-
-  app.put('/api/admin/settings', authenticateToken, adminOnly, (req: any, res: any) => {
-    const updates = req.body;
-    for (const [key, value] of Object.entries(updates)) {
-      db.prepare('INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)').run(key, value);
-    }
-    res.json({ success: true });
   });
 
   // Posts & Reels

@@ -80,7 +80,10 @@ const Navbar = ({ currentView, setView, user, onLogout }: { currentView: View, s
     <>
       <nav className="fixed top-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 z-50 px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-4 lg:gap-8">
-          <h1 className="text-2xl font-black tracking-tighter text-white cursor-pointer" onClick={() => handleNav('home')}>STYN</h1>
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-black tracking-tighter text-white cursor-pointer leading-none" onClick={() => handleNav('home')}>STYN</h1>
+            <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-brand">unique experience</span>
+          </div>
           
           {/* Desktop Menu */}
           <div className="hidden lg:flex items-center gap-6">
@@ -268,7 +271,7 @@ export default function App() {
       case 'dating':
         return <DatingView user={user} setView={setView} />;
       case 'reels':
-        return <ReelsView />;
+        return <ReelsView user={user} />;
       case 'chat':
         return <ChatView user={user} />;
       case 'blockbuster':
@@ -276,7 +279,7 @@ export default function App() {
       case 'admin':
         return <AdminView setView={setView} user={user} />;
       case 'profile':
-        return <ProfileView user={user} />;
+        return <ProfileView user={user} onUpdateUser={setUser} />;
       case 'auth':
         return <AuthView onLogin={(u) => { setUser(u); setView('home'); localStorage.setItem('styn_user', JSON.stringify(u)); }} />;
       default:
@@ -340,7 +343,7 @@ const Launcher = ({ onLaunch }: { onLaunch: () => void }) => {
           <h1 className="text-5xl font-black text-black tracking-tighter">S</h1>
         </div>
         <h2 className="text-6xl font-black tracking-tighter text-white mb-2">STYN</h2>
-        <p className="text-white/40 font-mono text-xs uppercase tracking-[0.4em] mb-12">Social • Dating • Entertainment</p>
+        <p className="text-brand font-mono text-[10px] uppercase tracking-[0.4em] mb-12">unique experience</p>
         
         <button 
           onClick={onLaunch}
@@ -395,8 +398,7 @@ const AdBanner = () => {
 const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserData | null }) => {
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
-  const [reports, setReports] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'reports' | 'ads'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users'>('stats');
 
   useEffect(() => {
     if (!user?.token) return;
@@ -417,17 +419,8 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
       setUsers(data);
     };
 
-    const fetchReports = async () => {
-      const res = await fetch('/api/admin/reports', {
-        headers: { 'Authorization': `Bearer ${user.token}` }
-      });
-      const data = await res.json();
-      setReports(data);
-    };
-
     fetchStats();
     fetchUsers();
-    fetchReports();
   }, [user]);
 
   if (!stats) return <div className="p-12 text-center animate-pulse">Loading Admin Panel...</div>;
@@ -459,7 +452,7 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
       </header>
 
       <div className="flex gap-4 mb-8 overflow-x-auto no-scrollbar pb-2">
-        {['stats', 'users', 'reports', 'ads'].map((tab) => (
+        {['stats', 'users'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
@@ -560,65 +553,18 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
               </div>
             </div>
           )}
-
-          {activeTab === 'reports' && (
-            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
-              <h3 className="text-xl font-bold mb-6">Reports Queue</h3>
-              <div className="space-y-4">
-                {reports.length === 0 ? (
-                  <p className="text-center text-white/20 py-12">No pending reports.</p>
-                ) : (
-                  reports.map(r => (
-                    <div key={r.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-bold text-sm">Report by @{r.username}</p>
-                          <p className="text-xs text-red-400">Reason: {r.reason}</p>
-                        </div>
-                        <span className="px-2 py-1 rounded bg-white/10 text-[8px] font-bold uppercase">{r.status}</span>
-                      </div>
-                      <p className="text-xs text-white/60 italic">"{r.post_content}"</p>
-                      <div className="flex gap-2 pt-2">
-                        <button className="flex-1 py-2 rounded-xl bg-red-500/20 text-red-400 text-[10px] font-bold uppercase">Delete Post</button>
-                        <button className="flex-1 py-2 rounded-xl bg-white/10 text-white text-[10px] font-bold uppercase">Dismiss</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </section>
 
-        <section className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
-          <h3 className="text-xl font-bold mb-6">System Health</h3>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40 mb-2">
-                <span>Server Load</span>
-                <span className="text-emerald-400">42%</span>
-              </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-400 w-[42%]" />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40 mb-2">
-                <span>Ad Revenue</span>
-                <span className="text-indigo-400">${stats.adRevenue}</span>
-              </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-400 w-[68%]" />
-              </div>
+        <aside className="space-y-8">
+          <div className="bg-brand text-black rounded-[2rem] p-8">
+            <h3 className="text-xl font-black tracking-tighter mb-2">QUICK ACTIONS</h3>
+            <p className="text-black/60 text-xs mb-6">Common administrative tasks.</p>
+            <div className="space-y-3">
+              <button className="w-full py-3 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all">Send Announcement</button>
+              <button className="w-full py-3 rounded-xl bg-black/10 text-black border border-black/10 text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all">Export User Data</button>
             </div>
           </div>
-          
-          <div className="mt-12 pt-12 border-t border-white/10 space-y-4">
-            <button className="w-full py-4 rounded-2xl bg-brand text-black font-black uppercase tracking-widest text-xs">New Announcement</button>
-            <button className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs">Site Settings</button>
-            <button className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs">Mailing List</button>
-          </div>
-        </section>
+        </aside>
       </div>
     </div>
   );
@@ -628,26 +574,67 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
   const [posts, setPosts] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUpload, setShowUpload] = useState(false);
+  const [content, setContent] = useState('');
+  const [media, setMedia] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const [postsRes, newsRes] = await Promise.all([
+        fetch('/api/posts'),
+        fetch('/api/news')
+      ]);
+      const postsData = await postsRes.json();
+      const newsData = await newsRes.json();
+      setPosts(postsData);
+      setNews(newsData);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [postsRes, newsRes] = await Promise.all([
-          fetch('/api/posts'),
-          fetch('/api/news')
-        ]);
-        const postsData = await postsRes.json();
-        const newsData = await newsRes.json();
-        setPosts(postsData);
-        setNews(newsData);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [user?.username, user?.avatar_url]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setMedia(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!user || (!content && !media)) return alert('Please add content or media');
+    setUploading(true);
+    try {
+      await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          content,
+          media_url: media,
+          type: 'post'
+        })
+      });
+      setShowUpload(false);
+      setContent('');
+      setMedia(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleLike = async (postId: number) => {
     if (!user) return alert('Please login to like posts');
@@ -688,6 +675,80 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
         {/* Main Feed */}
         <div className="lg:col-span-8 space-y-6 md:space-y-8">
           <AdBanner />
+          
+          {user && (
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+              <div className="flex gap-4 items-center">
+                <img src={user.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-12 h-12 rounded-full object-cover border border-white/10" />
+                <button 
+                  onClick={() => setShowUpload(true)}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-left text-white/40 hover:bg-white/10 transition-all text-sm"
+                >
+                  What's on your mind, {user.first_name || user.username}?
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showUpload && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative"
+              >
+                <button 
+                  onClick={() => setShowUpload(false)}
+                  className="absolute top-6 right-6 text-white/40 hover:text-white"
+                >
+                  <X size={24} />
+                </button>
+                <h3 className="text-2xl font-black tracking-tighter mb-6 uppercase">Create Post</h3>
+                
+                <textarea 
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Share something unique..."
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-sm focus:outline-none focus:border-brand h-32 mb-6"
+                />
+
+                <div className="mb-6">
+                  <input 
+                    type="file" 
+                    accept="image/*,video/*"
+                    onChange={handleFileChange}
+                    className="hidden" 
+                    id="post-media" 
+                  />
+                  <label 
+                    htmlFor="post-media"
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-2xl p-8 cursor-pointer hover:border-brand transition-colors"
+                  >
+                    {media ? (
+                      media.startsWith('data:video') ? (
+                        <video src={media} className="max-h-48 rounded-xl" controls />
+                      ) : (
+                        <img src={media} alt="Preview" className="max-h-48 rounded-xl" />
+                      )
+                    ) : (
+                      <>
+                        <PlusSquare size={32} className="text-white/20 mb-2" />
+                        <p className="text-xs font-bold uppercase tracking-widest text-white/40">Add Photo or Video</p>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                <button 
+                  onClick={handleUpload}
+                  disabled={uploading || (!content && !media)}
+                  className="w-full bg-brand text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50"
+                >
+                  {uploading ? 'Uploading...' : 'Post Now'}
+                </button>
+              </motion.div>
+            </div>
+          )}
           
           {loading ? (
             <div className="flex items-center justify-center p-12">
@@ -980,23 +1041,23 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
   );
 };
 
-const ReelsView = () => {
+const ReelsView = ({ user }: { user: UserData | null }) => {
   const [showUpload, setShowUpload] = useState(false);
   const [reelContent, setReelContent] = useState('');
   const [reelMedia, setReelMedia] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [reels, setReels] = useState<any[]>([]);
   const [currentReelIndex, setCurrentReelIndex] = useState(0);
-  const [user, setUser] = useState<UserData | null>(null);
+
+  const fetchReels = async () => {
+    const res = await fetch('/api/posts?type=reel');
+    const data = await res.json();
+    setReels(data);
+  };
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('styn_user');
-    if (savedUser) setUser(JSON.parse(savedUser));
-    
-    fetch('/api/posts?type=reel')
-      .then(res => res.json())
-      .then(data => setReels(data));
-  }, []);
+    fetchReels();
+  }, [user?.username, user?.avatar_url]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1449,9 +1510,9 @@ const BlockbusterView = () => {
   );
 };
 
-const ProfileView = ({ user }: { user: UserData | null }) => {
+const ProfileView = ({ user, onUpdateUser }: { user: UserData | null, onUpdateUser: (u: UserData) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [stats, setStats] = useState({ followers: 0, following: 0 });
+  const [stats, setStats] = useState({ followers: 0, following: 0, posts: 0 });
   const [editData, setEditData] = useState({
     username: user?.username || '',
     first_name: user?.first_name || '',
@@ -1471,7 +1532,11 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
       })
       .then(res => res.json())
       .then(data => {
-        setStats({ followers: data.followersCount, following: data.followingCount });
+        setStats({ 
+          followers: data.followersCount, 
+          following: data.followingCount,
+          posts: data.postsCount || 0
+        });
       });
     }
   }, [user]);
@@ -1491,8 +1556,10 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
       })
     });
     const updated = await res.json();
-    localStorage.setItem('styn_user', JSON.stringify({ ...updated, token: user.token }));
-    window.location.reload();
+    const newUser = { ...updated, token: user.token };
+    localStorage.setItem('styn_user', JSON.stringify(newUser));
+    onUpdateUser(newUser);
+    setIsEditing(false);
   };
 
   return (
@@ -1633,7 +1700,7 @@ const ProfileView = ({ user }: { user: UserData | null }) => {
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Following</p>
             </div>
             <div>
-              <p className="text-xl md:text-2xl font-black tracking-tighter">0</p>
+              <p className="text-xl md:text-2xl font-black tracking-tighter">{stats.posts}</p>
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Posts</p>
             </div>
           </div>
@@ -1766,6 +1833,10 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
 
   return (
     <div className="max-w-md mx-auto px-4 py-24">
+      <div className="flex flex-col items-center mb-12">
+        <h1 className="text-6xl font-black tracking-tighter italic">STYN</h1>
+        <p className="text-[10px] uppercase tracking-[0.3em] font-bold text-white/40 -mt-1">unique experience</p>
+      </div>
       <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10">
         <h2 className="text-4xl font-black tracking-tighter mb-2 text-center">
           {isLogin ? 'WELCOME BACK' : step === 1 ? 'JOIN STYN' : 'COMPLETE PROFILE'}
