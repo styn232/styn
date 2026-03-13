@@ -38,7 +38,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // --- Types ---
-type View = 'home' | 'dating' | 'reels' | 'chat' | 'blockbuster' | 'profile' | 'admin' | 'auth';
+type View = 'home' | 'dating' | 'reels' | 'chat' | 'blockbuster' | 'profile' | 'admin' | 'auth' | 'user-profile';
 
 interface UserData {
   id: number;
@@ -248,6 +248,7 @@ const Navbar = ({ currentView, setView, user, onLogout }: { currentView: View, s
 export default function App() {
   const [isLaunched, setIsLaunched] = useState(false);
   const [view, setView] = useState<View>('home');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [user, setUser] = useState<UserData | null>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -264,26 +265,33 @@ export default function App() {
     setView('home');
   };
 
+  const handleSelectUser = (id: number) => {
+    setSelectedUserId(id);
+    setView('user-profile');
+  };
+
   const renderContent = () => {
     switch (view) {
       case 'home':
-        return <HomeView setView={setView} user={user} />;
+        return <HomeView setView={setView} user={user} onSelectUser={handleSelectUser} />;
       case 'dating':
-        return <DatingView user={user} setView={setView} />;
+        return <DatingView user={user} setView={setView} onSelectUser={handleSelectUser} />;
       case 'reels':
-        return <ReelsView user={user} />;
+        return <ReelsView user={user} onSelectUser={handleSelectUser} />;
       case 'chat':
-        return <ChatView user={user} />;
+        return <ChatView user={user} onSelectUser={handleSelectUser} />;
       case 'blockbuster':
         return <BlockbusterView />;
       case 'admin':
         return <AdminView setView={setView} user={user} />;
       case 'profile':
         return <ProfileView user={user} onUpdateUser={setUser} />;
+      case 'user-profile':
+        return <ProfileView user={user} onUpdateUser={setUser} targetUserId={selectedUserId} onBack={() => setView('home')} />;
       case 'auth':
         return <AuthView onLogin={(u) => { setUser(u); setView('home'); localStorage.setItem('styn_user', JSON.stringify(u)); }} />;
       default:
-        return <HomeView setView={setView} user={user} />;
+        return <HomeView setView={setView} user={user} onSelectUser={handleSelectUser} />;
     }
   };
 
@@ -310,7 +318,7 @@ export default function App() {
       </main>
       
       {/* Admin Quick Access (Demo Only) */}
-      {user?.is_super_admin === 1 && (
+      {(user?.is_super_admin === 1 || user?.email === 'jobsatespace@gmail.com') && (
         <button 
           onClick={() => setView('admin')}
           className="fixed bottom-20 lg:bottom-4 right-4 bg-brand text-black px-4 py-2 rounded-full flex items-center justify-center gap-2 hover:scale-105 transition-all z-50 font-black text-[10px] uppercase tracking-widest shadow-xl"
@@ -399,29 +407,47 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'stats' | 'users'>('stats');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.token) return;
     
     const fetchStats = async () => {
-      const res = await fetch('/api/admin/stats', {
-        headers: { 'Authorization': `Bearer ${user.token}` }
-      });
-      const data = await res.json();
-      setStats(data);
+      try {
+        const res = await fetch('/api/admin/stats', {
+          headers: { 'Authorization': `Bearer ${user.token}` }
+        });
+        if (!res.ok) throw new Error('Failed to fetch stats');
+        const data = await res.json();
+        setStats(data);
+      } catch (err: any) {
+        setError(err.message);
+      }
     };
 
     const fetchUsers = async () => {
-      const res = await fetch('/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${user.token}` }
-      });
-      const data = await res.json();
-      setUsers(data);
+      try {
+        const res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${user.token}` }
+        });
+        if (!res.ok) throw new Error('Failed to fetch users');
+        const data = await res.json();
+        setUsers(data);
+      } catch (err: any) {
+        setError(err.message);
+      }
     };
 
     fetchStats();
     fetchUsers();
   }, [user]);
+
+  if (error) return (
+    <div className="p-12 text-center">
+      <p className="text-red-400 mb-4">Error: {error}</p>
+      <button onClick={() => window.location.reload()} className="px-6 py-2 bg-brand text-black rounded-full font-bold">Retry</button>
+    </div>
+  );
 
   if (!stats) return <div className="p-12 text-center animate-pulse">Loading Admin Panel...</div>;
 
@@ -570,7 +596,7 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
   );
 };
 
-const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserData | null }) => {
+const HomeView = ({ setView, user, onSelectUser }: { setView: (v: View) => void, user: UserData | null, onSelectUser: (id: number) => void }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -758,9 +784,14 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
             <div key={post.id} className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden group transition-all hover:border-white/20">
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <img src={post.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                  <img 
+                    src={post.avatar_url || 'https://picsum.photos/seed/user/100/100'} 
+                    alt="" 
+                    className="w-10 h-10 rounded-full object-cover border border-white/10 cursor-pointer" 
+                    onClick={() => onSelectUser(post.user_id)}
+                  />
                   <div>
-                    <p className="font-bold text-sm">@{post.username}</p>
+                    <p className="font-bold text-sm cursor-pointer hover:text-brand transition-colors" onClick={() => onSelectUser(post.user_id)}>@{post.username}</p>
                     <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">
                       {new Date(post.created_at).toLocaleDateString()}
                     </p>
@@ -876,7 +907,7 @@ const HomeView = ({ setView, user }: { setView: (v: View) => void, user: UserDat
   );
 };
 
-const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: View) => void }) => {
+const DatingView = ({ user, setView, onSelectUser }: { user: UserData | null, setView: (v: View) => void, onSelectUser: (id: number) => void }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -985,7 +1016,7 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
 
             <div className="absolute bottom-0 left-0 right-0 p-8">
               <div className="flex items-end gap-3 mb-2">
-                <h3 className="text-4xl font-black tracking-tighter">{currentProfile.username}</h3>
+                <h3 className="text-4xl font-black tracking-tighter cursor-pointer hover:text-brand transition-colors" onClick={() => onSelectUser(currentProfile.id)}>{currentProfile.username}</h3>
                 <span className="text-2xl font-medium text-white/70 mb-1">24</span>
               </div>
               <p className="text-white/70 text-sm mb-6">{currentProfile.bio || 'No bio provided.'}</p>
@@ -1041,7 +1072,7 @@ const DatingView = ({ user, setView }: { user: UserData | null, setView: (v: Vie
   );
 };
 
-const ReelsView = ({ user }: { user: UserData | null }) => {
+const ReelsView = ({ user, onSelectUser }: { user: UserData | null, onSelectUser: (id: number) => void }) => {
   const [showUpload, setShowUpload] = useState(false);
   const [reelContent, setReelContent] = useState('');
   const [reelMedia, setReelMedia] = useState<string | null>(null);
@@ -1231,9 +1262,9 @@ const ReelsView = ({ user }: { user: UserData | null }) => {
 
           {/* Info */}
           <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <img src={currentReel.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-white object-cover" />
-              <p className="font-bold text-sm md:text-base">@{currentReel.username}</p>
+            <div className="flex items-center gap-3 mb-4 cursor-pointer group" onClick={() => onSelectUser(currentReel.user_id)}>
+              <img src={currentReel.avatar_url || 'https://picsum.photos/seed/user/100/100'} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-white object-cover group-hover:border-brand transition-all" />
+              <p className="font-bold text-sm md:text-base group-hover:text-brand transition-colors">@{currentReel.username}</p>
               <button 
                 onClick={async (e) => {
                   e.stopPropagation();
@@ -1267,7 +1298,7 @@ const ReelsView = ({ user }: { user: UserData | null }) => {
   );
 };
 
-const ChatView = ({ user }: { user: UserData | null }) => {
+const ChatView = ({ user, onSelectUser }: { user: UserData | null, onSelectUser: (id: number) => void }) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [activeChat, setActiveChat] = useState<any>(null);
@@ -1420,9 +1451,14 @@ const ChatView = ({ user }: { user: UserData | null }) => {
                 <button onClick={() => setActiveChat(null)} className="lg:hidden p-2 -ml-2 text-white/50">
                   <X size={20} />
                 </button>
-                <img src={activeChat.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                <div>
-                  <p className="font-bold text-sm">{activeChat.username}</p>
+                <img 
+                  src={activeChat.avatar_url} 
+                  alt="" 
+                  className="w-10 h-10 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity" 
+                  onClick={() => onSelectUser(activeChat.id)}
+                />
+                <div className="cursor-pointer" onClick={() => onSelectUser(activeChat.id)}>
+                  <p className="font-bold text-sm hover:text-brand transition-colors">{activeChat.username}</p>
                   <p className="text-[10px] text-brand uppercase tracking-widest">Online</p>
                 </div>
               </div>
@@ -1510,9 +1546,11 @@ const BlockbusterView = () => {
   );
 };
 
-const ProfileView = ({ user, onUpdateUser }: { user: UserData | null, onUpdateUser: (u: UserData) => void }) => {
+const ProfileView = ({ user, onUpdateUser, targetUserId, onBack }: { user: UserData | null, onUpdateUser: (u: UserData) => void, targetUserId?: number | null, onBack?: () => void }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [stats, setStats] = useState({ followers: 0, following: 0, posts: 0 });
+  const [targetUser, setTargetUser] = useState<any>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [editData, setEditData] = useState({
     username: user?.username || '',
     first_name: user?.first_name || '',
@@ -1525,23 +1563,58 @@ const ProfileView = ({ user, onUpdateUser }: { user: UserData | null, onUpdateUs
     location: user?.location || ''
   });
 
+  const isOwnProfile = !targetUserId || targetUserId === user?.id;
+
   useEffect(() => {
-    if (user) {
-      fetch(`/api/users/${user.id}`, {
+    const fetchId = targetUserId || user?.id;
+    if (fetchId && user) {
+      fetch(`/api/users/${fetchId}`, {
         headers: { 'Authorization': `Bearer ${user.token}` }
       })
       .then(res => res.json())
       .then(data => {
+        setTargetUser(data);
+        setIsFollowing(data.isFollowing);
         setStats({ 
           followers: data.followersCount, 
           following: data.followingCount,
           posts: data.postsCount || 0
         });
+        if (isOwnProfile) {
+          setEditData({
+            username: data.username || '',
+            first_name: data.first_name || '',
+            last_name: data.last_name || '',
+            bio: data.bio || '',
+            interests: data.interests || '',
+            avatar_url: data.avatar_url || '',
+            age: data.age || '',
+            gender: data.gender || '',
+            location: data.location || ''
+          });
+        }
       });
     }
-  }, [user]);
+  }, [user, targetUserId]);
 
   if (!user) return null;
+  const displayUser = isOwnProfile ? user : targetUser;
+  if (!displayUser) return <div className="p-12 text-center animate-pulse">Loading Profile...</div>;
+
+  const handleFollow = async () => {
+    if (!user || !targetUserId) return;
+    const res = await fetch('/api/follow', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ follower_id: user.id, following_id: targetUserId })
+    });
+    const data = await res.json();
+    setIsFollowing(data.followed);
+    setStats(s => ({ ...s, followers: data.followed ? s.followers + 1 : s.followers - 1 }));
+  };
 
   const handleSave = async () => {
     const res = await fetch('/api/profile', {
@@ -1567,10 +1640,24 @@ const ProfileView = ({ user, onUpdateUser }: { user: UserData | null, onUpdateUs
       <div className="bg-white/5 border border-white/10 rounded-[2rem] md:rounded-[3rem] p-6 md:p-12 relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-br from-brand/20 to-orange-600/20" />
         
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="absolute top-8 left-8 z-20 flex items-center gap-2 text-white/40 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest"
+          >
+            <ChevronLeft size={14} />
+            Back
+          </button>
+        )}
+
         <div className="relative z-10 flex flex-col items-center text-center">
           <div className="relative group">
             <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-brand to-orange-600 border-4 border-[#050505] shadow-2xl mb-6 overflow-hidden">
-               {editData.avatar_url ? <img src={editData.avatar_url} alt="" className="w-full h-full object-cover" /> : <User size={48} className="m-auto text-white mt-6 md:mt-8" />}
+               {isOwnProfile ? (
+                 editData.avatar_url ? <img src={editData.avatar_url} alt="" className="w-full h-full object-cover" /> : <User size={48} className="m-auto text-white mt-6 md:mt-8" />
+               ) : (
+                 displayUser.avatar_url ? <img src={displayUser.avatar_url} alt="" className="w-full h-full object-cover" /> : <User size={48} className="m-auto text-white mt-6 md:mt-8" />
+               )}
             </div>
             {isEditing && (
               <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1667,26 +1754,39 @@ const ProfileView = ({ user, onUpdateUser }: { user: UserData | null, onUpdateUs
             <>
               <div className="flex items-center gap-3 mb-2">
                 <h2 className="text-3xl md:text-4xl font-black tracking-tighter">
-                  {user.first_name} {user.last_name}
-                  <span className="text-white/40 text-lg ml-2 font-medium">@{user.username}</span>
+                  {displayUser.first_name} {displayUser.last_name}
+                  <span className="text-white/40 text-lg ml-2 font-medium">@{displayUser.username}</span>
                 </h2>
-                {user.is_super_admin === 1 && (
+                {displayUser.is_super_admin === 1 && (
                   <span className="bg-brand text-black text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full">Super Admin</span>
                 )}
               </div>
-              <p className="text-white/40 text-sm max-w-md mb-2">{user.bio || 'No bio yet.'}</p>
+              <p className="text-white/40 text-sm max-w-md mb-2">{displayUser.bio || 'No bio yet.'}</p>
               <div className="flex gap-4 text-[10px] uppercase font-bold tracking-widest text-white/30 mb-4">
-                {user.age && <span>{user.age} Years Old</span>}
-                {user.gender && <span>{user.gender}</span>}
-                {user.location && <span>{user.location}</span>}
+                {displayUser.age && <span>{displayUser.age} Years Old</span>}
+                {displayUser.gender && <span>{displayUser.gender}</span>}
+                {displayUser.location && <span>{displayUser.location}</span>}
               </div>
-              <p className="text-brand font-mono text-xs md:text-sm uppercase tracking-[0.3em] mb-8">{user.level} LEVEL • {user.points} POINTS</p>
-              <button 
-                onClick={() => setIsEditing(true)}
-                className="px-8 py-2 rounded-full border border-white/10 hover:bg-white hover:text-black transition-all font-bold text-xs uppercase tracking-widest mb-8"
-              >
-                Edit Profile
-              </button>
+              <p className="text-brand font-mono text-xs md:text-sm uppercase tracking-[0.3em] mb-8">{displayUser.level} LEVEL • {displayUser.points} POINTS</p>
+              
+              {isOwnProfile ? (
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="px-8 py-2 rounded-full border border-white/10 hover:bg-white hover:text-black transition-all font-bold text-xs uppercase tracking-widest mb-8"
+                >
+                  Edit Profile
+                </button>
+              ) : (
+                <button 
+                  onClick={handleFollow}
+                  className={cn(
+                    "px-8 py-2 rounded-full border transition-all font-bold text-xs uppercase tracking-widest mb-8",
+                    isFollowing ? "bg-white text-black border-white" : "border-brand text-brand hover:bg-brand hover:text-black"
+                  )}
+                >
+                  {isFollowing ? 'Following' : 'Follow'}
+                </button>
+              )}
             </>
           )}
           
