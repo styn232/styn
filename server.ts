@@ -259,7 +259,7 @@ const authenticateToken = (req: any, res: any, next: any) => {
 };
 
 const adminOnly = (req: any, res: any, next: any) => {
-  if (req.user && req.user.is_super_admin) {
+  if (req.user && (req.user.is_super_admin || req.user.email === 'jobsatespace@gmail.com')) {
     next();
   } else {
     res.status(403).json({ error: 'Admin access required' });
@@ -390,7 +390,7 @@ async function startServer() {
     }
   });
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
   app.use(checkIPBan);
 
   // --- API ROUTES ---
@@ -548,6 +548,21 @@ async function startServer() {
   app.get('/api/admin/users', authenticateToken, adminOnly, (req: any, res: any) => {
     const users = db.prepare('SELECT * FROM users').all();
     res.json(users);
+  });
+
+  app.put('/api/admin/users/:id', authenticateToken, adminOnly, (req: any, res: any) => {
+    const { id } = req.params;
+    const { username, email, first_name, last_name, bio, points, level, is_super_admin, is_banned } = req.body;
+    try {
+      db.prepare(`
+        UPDATE users 
+        SET username = ?, email = ?, first_name = ?, last_name = ?, bio = ?, points = ?, level = ?, is_super_admin = ?, is_banned = ?
+        WHERE id = ?
+      `).run(username, email, first_name, last_name, bio, points, level, is_super_admin, is_banned, id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ error: 'Update failed' });
+    }
   });
 
   // Posts & Reels

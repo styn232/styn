@@ -408,6 +408,60 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
   const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'stats' | 'users'>('stats');
   const [error, setError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [postContent, setPostContent] = useState('');
+  const [postMedia, setPostMedia] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleAdminPost = async () => {
+    if (!user || (!postContent && !postMedia)) return alert('Please add content or media');
+    setUploading(true);
+    try {
+      await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          content: postContent,
+          media_url: postMedia,
+          type: 'post'
+        })
+      });
+      setShowPostModal(false);
+      setPostContent('');
+      setPostMedia(null);
+      alert('Post created successfully!');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPostMedia(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        headers: { 'Authorization': `Bearer ${user?.token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch users');
+      const data = await res.json();
+      setUsers(data);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
     if (!user?.token) return;
@@ -425,22 +479,27 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
       }
     };
 
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch('/api/admin/users', {
-          headers: { 'Authorization': `Bearer ${user.token}` }
-        });
-        if (!res.ok) throw new Error('Failed to fetch users');
-        const data = await res.json();
-        setUsers(data);
-      } catch (err: any) {
-        setError(err.message);
-      }
-    };
-
     fetchStats();
     fetchUsers();
   }, [user]);
+
+  const handleUpdateUser = async (updatedUser: any) => {
+    try {
+      const res = await fetch(`/api/admin/users/${updatedUser.id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user?.token}`
+        },
+        body: JSON.stringify(updatedUser)
+      });
+      if (!res.ok) throw new Error('Update failed');
+      setEditingUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   if (error) return (
     <div className="p-12 text-center">
@@ -568,11 +627,26 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
                     </div>
                     <div className="flex gap-2">
                       {u.is_banned ? (
-                        <button className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">Unban</button>
+                        <button 
+                          onClick={() => handleUpdateUser({ ...u, is_banned: 0 })}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase"
+                        >
+                          Unban
+                        </button>
                       ) : (
-                        <button className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-bold uppercase">Ban</button>
+                        <button 
+                          onClick={() => handleUpdateUser({ ...u, is_banned: 1 })}
+                          className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 text-[10px] font-bold uppercase"
+                        >
+                          Ban
+                        </button>
                       )}
-                      <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[10px] font-bold uppercase">Edit</button>
+                      <button 
+                        onClick={() => setEditingUser(u)}
+                        className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[10px] font-bold uppercase"
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -581,16 +655,209 @@ const AdminView = ({ setView, user }: { setView: (v: View) => void, user: UserDa
           )}
         </section>
 
+        {editingUser && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative"
+            >
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="absolute top-6 right-6 text-white/40 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+              <h3 className="text-2xl font-black tracking-tighter mb-6 uppercase">Edit User: @{editingUser.username}</h3>
+              
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 no-scrollbar">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Username</label>
+                  <input 
+                    type="text" 
+                    value={editingUser.username}
+                    onChange={e => setEditingUser({ ...editingUser, username: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Email</label>
+                  <input 
+                    type="email" 
+                    value={editingUser.email}
+                    onChange={e => setEditingUser({ ...editingUser, email: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">First Name</label>
+                    <input 
+                      type="text" 
+                      value={editingUser.first_name || ''}
+                      onChange={e => setEditingUser({ ...editingUser, first_name: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Last Name</label>
+                    <input 
+                      type="text" 
+                      value={editingUser.last_name || ''}
+                      onChange={e => setEditingUser({ ...editingUser, last_name: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Bio</label>
+                  <textarea 
+                    value={editingUser.bio || ''}
+                    onChange={e => setEditingUser({ ...editingUser, bio: e.target.value })}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none h-20"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Points</label>
+                    <input 
+                      type="number" 
+                      value={editingUser.points}
+                      onChange={e => setEditingUser({ ...editingUser, points: parseInt(e.target.value) })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-2 mb-1 block">Level</label>
+                    <input 
+                      type="text" 
+                      value={editingUser.level}
+                      onChange={e => setEditingUser({ ...editingUser, level: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-brand outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={editingUser.is_super_admin === 1}
+                      onChange={e => setEditingUser({ ...editingUser, is_super_admin: e.target.checked ? 1 : 0 })}
+                      className="w-4 h-4 rounded border-white/10 bg-white/5 text-brand focus:ring-brand"
+                    />
+                    <span className="text-xs font-bold uppercase tracking-widest text-white/60">Super Admin</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={editingUser.is_banned === 1}
+                      onChange={e => setEditingUser({ ...editingUser, is_banned: e.target.checked ? 1 : 0 })}
+                      className="w-4 h-4 rounded border-white/10 bg-white/5 text-red-500 focus:ring-red-500"
+                    />
+                    <span className="text-xs font-bold uppercase tracking-widest text-white/60">Banned</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button 
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-4 rounded-2xl border border-white/10 font-black uppercase tracking-widest text-xs hover:bg-white/5 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleUpdateUser(editingUser)}
+                  className="flex-1 bg-brand text-black py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         <aside className="space-y-8">
           <div className="bg-brand text-black rounded-[2rem] p-8">
             <h3 className="text-xl font-black tracking-tighter mb-2">QUICK ACTIONS</h3>
             <p className="text-black/60 text-xs mb-6">Common administrative tasks.</p>
             <div className="space-y-3">
-              <button className="w-full py-3 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all">Send Announcement</button>
+              <button 
+                onClick={() => setShowPostModal(true)}
+                className="w-full py-3 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all"
+              >
+                Create Admin Post
+              </button>
               <button className="w-full py-3 rounded-xl bg-black/10 text-black border border-black/10 text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all">Export User Data</button>
             </div>
           </div>
         </aside>
+
+        {showPostModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-xl p-8 relative"
+            >
+              <button 
+                onClick={() => setShowPostModal(false)}
+                className="absolute top-6 right-6 text-white/40 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+              <h3 className="text-2xl font-black tracking-tighter mb-6 uppercase">Create Admin Post</h3>
+              
+              <textarea 
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleAdminPost();
+                  }
+                }}
+                placeholder="Write an announcement or post..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-sm focus:outline-none focus:border-brand h-32 mb-6"
+              />
+
+              <div className="mb-6">
+                <input 
+                  type="file" 
+                  accept="image/*,video/*"
+                  onChange={handleFileChange}
+                  className="hidden" 
+                  id="admin-post-media" 
+                />
+                <label 
+                  htmlFor="admin-post-media"
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-2xl p-8 cursor-pointer hover:border-brand transition-colors"
+                >
+                  {postMedia ? (
+                    postMedia.startsWith('data:video') ? (
+                      <video src={postMedia} className="max-h-48 rounded-xl" controls />
+                    ) : (
+                      <img src={postMedia} alt="Preview" className="max-h-48 rounded-xl" />
+                    )
+                  ) : (
+                    <>
+                      <PlusSquare size={32} className="text-white/20 mb-2" />
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/40">Add Photo or Video</p>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              <button 
+                onClick={handleAdminPost}
+                disabled={uploading || (!postContent && !postMedia)}
+                className="w-full bg-brand text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50"
+              >
+                {uploading ? 'Uploading...' : 'Post as Admin'}
+              </button>
+            </motion.div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -734,6 +1001,12 @@ const HomeView = ({ setView, user, onSelectUser }: { setView: (v: View) => void,
                 <textarea 
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleUpload();
+                    }
+                  }}
                   placeholder="Share something unique..."
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-sm focus:outline-none focus:border-brand h-32 mb-6"
                 />
@@ -804,12 +1077,21 @@ const HomeView = ({ setView, user, onSelectUser }: { setView: (v: View) => void,
                 <p className="text-sm mb-4 leading-relaxed">{post.content}</p>
                 {post.media_url && (
                   <div className="rounded-2xl overflow-hidden bg-black/20 border border-white/5 aspect-video mb-4">
-                    <img 
-                      src={post.media_url} 
-                      alt="" 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      referrerPolicy="no-referrer"
-                    />
+                    {post.media_url.startsWith('data:video') || post.media_url.endsWith('.mp4') || post.media_url.includes('video') ? (
+                      <video 
+                        src={post.media_url} 
+                        className="w-full h-full object-cover"
+                        controls
+                        playsInline
+                      />
+                    ) : (
+                      <img 
+                        src={post.media_url} 
+                        alt="" 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
                   </div>
                 )}
                 
@@ -821,7 +1103,10 @@ const HomeView = ({ setView, user, onSelectUser }: { setView: (v: View) => void,
                     <Heart size={18} className={post.liked ? "fill-brand text-brand" : ""} />
                     {post.likes_count || 0}
                   </button>
-                  <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-emerald-400 transition-colors">
+                  <button 
+                    onClick={() => document.getElementById(`comment-input-${post.id}`)?.focus()}
+                    className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 hover:text-emerald-400 transition-colors"
+                  >
                     <MessageSquare size={18} />
                     {post.comments?.length || 0}
                   </button>
@@ -845,6 +1130,7 @@ const HomeView = ({ setView, user, onSelectUser }: { setView: (v: View) => void,
                   {user && (
                     <div className="flex gap-2 mt-4">
                       <input 
+                        id={`comment-input-${post.id}`}
                         type="text" 
                         placeholder="Write a comment..."
                         className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-white/30"
@@ -1153,6 +1439,12 @@ const ReelsView = ({ user, onSelectUser }: { user: UserData | null, onSelectUser
                 className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:outline-none focus:border-brand h-32"
                 value={reelContent}
                 onChange={e => setReelContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleUpload();
+                  }
+                }}
               />
               
               <div className="relative">
