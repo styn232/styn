@@ -24,7 +24,10 @@ import {
   ChevronRight,
   Zap,
   Star,
-  LayoutDashboard
+  LayoutDashboard,
+  DollarSign,
+  MapPin,
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
@@ -67,11 +70,21 @@ interface UserData {
   premium_type: string;
   points: number;
   level: number;
+  balance: number;
   followers_count: number;
   following_count: number;
   is_super_admin: number;
   token?: string;
 }
+
+const getStatusTier = (points: number) => {
+  if (points >= 10000) return { name: 'Platinum', color: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/20' };
+  if (points >= 5000) return { name: 'Gold', color: 'text-yellow-400', bg: 'bg-yellow-400/10', border: 'border-yellow-400/20' };
+  if (points >= 1000) return { name: 'Silver', color: 'text-gray-300', bg: 'bg-gray-300/10', border: 'border-gray-300/20' };
+  return { name: 'Bronze', color: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/20' };
+};
+
+const POINTS_TO_MONEY_RATE = 0.001;
 
 // --- COMPONENTS ---
 
@@ -81,7 +94,6 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
     { id: 'dating', icon: Flame, label: 'Dating' },
     { id: 'reels', icon: PlayCircle, label: 'Reels' },
     { id: 'chat', icon: MessageCircle, label: 'Chat' },
-    { id: 'market', icon: ShoppingBag, label: 'Market' },
     { id: 'profile', icon: User, label: 'Profile' },
   ];
 
@@ -313,11 +325,21 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
+  const [hasViewed, setHasViewed] = useState(false);
 
   const commentInputRef = useRef<HTMLInputElement>(null);
 
   const fetchComments = () => {
     fetch(`/api/posts/${post.id}/comments`).then(res => res.json()).then(setComments);
+  };
+
+  const trackView = async () => {
+    if (hasViewed) return;
+    await fetch(`/api/posts/${post.id}/view`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    setHasViewed(true);
   };
 
   useEffect(() => {
@@ -326,6 +348,11 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
       setTimeout(() => commentInputRef.current?.focus(), 100);
     }
   }, [showComments]);
+
+  useEffect(() => {
+    const timer = setTimeout(trackView, 3000); // Track view after 3 seconds
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLike = async () => {
     const res = await fetch(`/api/posts/${post.id}/like`, {
@@ -418,6 +445,12 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
           </div>
           <span className="text-xs font-bold">{post.comments_count}</span>
         </button>
+        <div className="flex items-center gap-2 text-white/20">
+          <div className="p-2">
+            <Search size={16} />
+          </div>
+          <span className="text-[10px] font-black">{post.views_count || 0}</span>
+        </div>
         <button className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
           <div className="p-2 rounded-xl group-hover:bg-green-400/10 transition-all">
             <Share2 size={20} />
@@ -872,6 +905,69 @@ const INTERESTS_LIST = [
   'Movies', 'Reading', 'Dancing', 'Sports', 'Nature', 'Fashion', 'Coding', 'Business',
   'Politics', 'Science', 'History', 'Cooking', 'Yoga', 'Meditation', 'Pets', 'Cars'
 ];
+const LOCATIONS = ["New York, USA", "London, UK", "Paris, France", "Tokyo, Japan", "Berlin, Germany", "Sydney, Australia", "Lagos, Nigeria", "Nairobi, Kenya", "Johannesburg, South Africa", "Dubai, UAE", "Toronto, Canada"];
+
+const WithdrawalModal = ({ user, onClose, onUpdate }: { user: UserData, onClose: () => void, onUpdate: () => void }) => {
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('Bank Transfer');
+  const [details, setDetails] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleWithdraw = async () => {
+    setLoading(true);
+    const res = await fetch('/api/withdrawals', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ amount: parseFloat(amount), method, details })
+    });
+    if (res.ok) {
+      onUpdate();
+      onClose();
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass w-full max-w-md p-8 rounded-[2.5rem] space-y-6 relative">
+        <button onClick={onClose} className="absolute top-6 right-6 text-white/40 hover:text-white"><X size={24} /></button>
+        <h2 className="text-3xl font-black tracking-tighter">Withdraw Funds</h2>
+        <div className="space-y-4">
+          <div className="p-4 bg-brand/10 rounded-2xl border border-brand/20">
+            <p className="text-[10px] font-black uppercase tracking-widest text-brand mb-1">Available Balance</p>
+            <p className="text-2xl font-black">${user.balance.toFixed(2)}</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Amount ($)</label>
+            <input type="number" className="input-glass w-full" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Method</label>
+            <select className="input-glass w-full" value={method} onChange={e => setMethod(e.target.value)}>
+              <option>Bank Transfer</option>
+              <option>PayPal</option>
+              <option>Crypto</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Details (Acc No / Email)</label>
+            <input className="input-glass w-full" value={details} onChange={e => setDetails(e.target.value)} placeholder="Enter details..." />
+          </div>
+        </div>
+        <button 
+          onClick={handleWithdraw}
+          disabled={loading || !amount}
+          className="w-full bg-brand hover:bg-brand-dark text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand/20 transition-all disabled:opacity-50"
+        >
+          {loading ? 'Processing...' : 'Request Withdrawal'}
+        </button>
+      </motion.div>
+    </div>
+  );
+};
 
 const RELATIONSHIP_STATUSES = [
   'Single', 'In a relationship', 'Engaged', 'Married', 'Complicated', 'Divorced', 'Widowed'
@@ -882,9 +978,24 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
   const [editData, setEditData] = useState({ ...user });
   const [activeTab, setActiveTab] = useState<'posts' | 'photos' | 'friends' | 'reels'>('posts');
   const [uploading, setUploading] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [friends, setFriends] = useState<any[]>([]);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const idInputRef = useRef<HTMLInputElement>(null);
 
+  const status = getStatusTier(user.points);
+
+  useEffect(() => {
+    fetch('/api/users').then(res => res.json()).then(data => {
+      setFriends(data.slice(0, 6));
+    });
+  }, []);
+
+  useEffect(() => {
+    setEditData({ ...user });
+  }, [user]);
   const handleSave = async () => {
     const res = await fetch('/api/profile/update', {
       method: 'PUT',
@@ -1004,32 +1115,46 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                 </div>
                 <div className="flex flex-col items-center sm:items-start">
                   <span className="text-xl font-black text-brand">{user.points}</span>
-                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Points ($1 = 100pts)</span>
+                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Points (${(user.points * POINTS_TO_MONEY_RATE).toFixed(2)})</span>
+                </div>
+                <div className="flex flex-col items-center sm:items-start">
+                  <span className="text-xl font-black text-green-400">${user.balance.toFixed(2)}</span>
+                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Balance</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-2 pb-2">
-              {isEditing ? (
-                <button 
-                  onClick={handleSave}
-                  className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-green-500/20 transition-all flex items-center gap-2"
-                >
-                  <Check size={16} />
-                  Save Changes
+            <div className="flex flex-col gap-2 pb-2">
+              <div className="flex gap-2">
+                {isEditing ? (
+                  <button 
+                    onClick={handleSave}
+                    className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-green-500/20 transition-all flex items-center gap-2"
+                  >
+                    <Check size={16} />
+                    Save
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setIsEditing(true)}
+                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all flex items-center gap-2"
+                  >
+                    <Settings size={16} />
+                    Edit
+                  </button>
+                )}
+                <button onClick={() => setShowWithdraw(true)} className="bg-brand text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-brand/20 transition-all flex items-center gap-2">
+                  <DollarSign size={16} />
+                  Withdraw
                 </button>
-              ) : (
-                <button 
-                  onClick={() => setIsEditing(true)}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all flex items-center gap-2"
-                >
-                  <Settings size={16} />
-                  Edit Profile
+                <button onClick={onLogout} className="p-3 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 transition-all hover:text-white">
+                  <LogOut size={20} />
                 </button>
-              )}
-              <button onClick={onLogout} className="p-3 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 transition-all hover:text-white">
-                <LogOut size={20} />
-              </button>
+              </div>
+              <div className={cn("px-4 py-2 rounded-xl border flex items-center justify-between", status.bg, status.color, status.border)}>
+                <span className="text-[10px] font-black uppercase tracking-widest">{status.name} Status</span>
+                <Trophy size={14} />
+              </div>
             </div>
           </div>
 
@@ -1066,12 +1191,75 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                     <span>{user.relationship_status || "Single"}</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-white/60">
+                    <MapPin size={16} className="text-brand" />
+                    {isEditing ? (
+                      <select 
+                        className="input-glass w-full text-xs"
+                        value={editData.location}
+                        onChange={e => setEditData({...editData, location: e.target.value})}
+                      >
+                        <option value="">Select Location</option>
+                        {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    ) : (
+                      <span>{user.location || "Earth"}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-white/60">
                     <Trophy size={16} className="text-brand" />
                     <div className={cn("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-gradient-to-r", getLevelColor(user.level))}>
                       {getLevelName(user.level)} Level {user.level}
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="glass p-6 rounded-3xl space-y-4">
+                <h3 className="font-black uppercase tracking-widest text-xs text-white/40">Verification</h3>
+                {user.verification_status === 'verified' ? (
+                  <div className="flex items-center gap-2 text-blue-400">
+                    <ShieldCheck size={16} />
+                    <span className="text-xs font-bold uppercase tracking-widest">Verified Account</span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[10px] text-white/40 font-bold leading-relaxed">Verify your account to get a badge and earn more points.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={async () => {
+                          await fetch('/api/verify/pay', { method: 'POST', headers: { 'Authorization': `Bearer ${user.token}` } });
+                          onUpdate();
+                        }}
+                        className="bg-brand/10 hover:bg-brand/20 text-brand py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                      >
+                        Pay $5.00
+                      </button>
+                      <button 
+                        onClick={() => idInputRef.current?.click()}
+                        className="bg-white/5 hover:bg-white/10 text-white/60 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                      >
+                        Upload ID
+                      </button>
+                      <input type="file" ref={idInputRef} className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+                        const { url } = await uploadRes.json();
+                        await fetch('/api/verify/upload', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+                          body: JSON.stringify({ id_url: url })
+                        });
+                        onUpdate();
+                      }} />
+                    </div>
+                    {user.verification_status === 'pending' && (
+                      <p className="text-[10px] text-yellow-500 font-bold text-center">Verification Pending Review</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="glass p-6 rounded-3xl">
@@ -1135,6 +1323,23 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                 ))}
               </div>
 
+              {activeTab === 'friends' && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {friends.map(friend => (
+                    <div key={friend.id} className="glass p-4 rounded-3xl flex flex-col items-center text-center space-y-3">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10">
+                        <img src={friend.photos ? JSON.parse(friend.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`} className="w-full h-full object-cover" alt="" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black tracking-tight truncate w-full">{friend.full_name}</p>
+                        <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">@{friend.username}</p>
+                      </div>
+                      <button className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all">View Profile</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {activeTab === 'posts' && (
                 <div className="space-y-6">
                   <div className="glass p-6 rounded-3xl text-center py-12">
@@ -1146,6 +1351,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
           </div>
         </div>
       </div>
+      {showWithdraw && <WithdrawalModal user={user} onClose={() => setShowWithdraw(false)} onUpdate={onUpdate} />}
     </div>
   );
 };
@@ -1278,10 +1484,35 @@ const MarketView = ({ user }: { user: UserData }) => {
                   placeholder="Description" className="input-glass w-full h-32 resize-none" 
                   value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})}
                 />
-                <input 
-                  type="text" placeholder="Image URL (or upload)" className="input-glass w-full" 
-                  value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})}
-                />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Product Image</label>
+                  <div 
+                    onClick={() => document.getElementById('product-upload')?.click()}
+                    className="w-full h-32 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-brand/50 transition-all cursor-pointer bg-white/5"
+                  >
+                    {newProduct.image_url ? (
+                      <img src={newProduct.image_url} className="w-full h-full object-cover rounded-2xl" alt="" />
+                    ) : (
+                      <>
+                        <Upload size={24} className="text-white/20" />
+                        <span className="text-xs text-white/40 font-bold">Click to upload photo</span>
+                      </>
+                    )}
+                  </div>
+                  <input 
+                    id="product-upload"
+                    type="file" 
+                    accept="image/*"
+                    className="hidden" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const data = await uploadFile(file, user.token!);
+                        setNewProduct({...newProduct, image_url: data.url});
+                      }
+                    }}
+                  />
+                </div>
               </div>
 
               <button onClick={handleAddProduct} className="btn-primary w-full text-lg uppercase tracking-widest font-black">
@@ -1384,11 +1615,14 @@ const ReelsView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: (
 const AdminView = ({ user }: { user: UserData }) => {
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'withdrawals'>('stats');
 
   const fetchStats = () => {
     fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setStats);
     fetch('/api/users', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setUsers);
+    fetch('/api/withdrawals', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setWithdrawals);
   };
 
   useEffect(() => {
@@ -1411,110 +1645,190 @@ const AdminView = ({ user }: { user: UserData }) => {
     }
   };
 
+  const handleWithdrawalStatus = async (id: number, status: string) => {
+    const res = await fetch(`/api/admin/withdrawals/${id}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ status })
+    });
+    if (res.ok) fetchStats();
+  };
+
   return (
     <div className="max-w-7xl mx-auto pt-28 pb-32 px-4 space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-black tracking-tighter">Admin Dashboard</h1>
-        <div className="flex gap-4">
-          <button className="btn-primary">Export Data</button>
+        <div className="flex gap-2 p-1 glass rounded-2xl">
+          {(['stats', 'users', 'withdrawals'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                activeTab === tab ? "bg-brand text-white" : "text-white/40 hover:text-white"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {[
-          { label: 'Total Users', value: stats?.totalUsers, icon: User },
-          { label: 'Total Posts', value: stats?.totalPosts, icon: LayoutDashboard },
-          { label: 'Total Matches', value: stats?.totalMatches, icon: Heart },
-          { label: 'Market Items', value: stats?.totalProducts, icon: ShoppingBag },
-        ].map(stat => (
-          <div key={stat.label} className="glass p-8 rounded-[2rem] flex items-center gap-6">
-            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center text-brand">
-              <stat.icon size={32} />
-            </div>
-            <div>
-              <p className="text-3xl font-black tracking-tighter">{stat.value || 0}</p>
-              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{stat.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {stats?.postStats && (
-        <div className="glass p-8 rounded-[2rem]">
-          <h2 className="text-xl font-black tracking-tighter mb-6">Post Distribution</h2>
-          <div className="flex gap-8">
-            {stats.postStats.map((s: any) => (
-              <div key={s.type} className="flex flex-col">
-                <span className="text-2xl font-black">{s.count}</span>
-                <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{s.type}s</span>
+      {activeTab === 'stats' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {[
+              { label: 'Total Users', value: stats?.totalUsers, icon: User },
+              { label: 'Total Posts', value: stats?.totalPosts, icon: LayoutDashboard },
+              { label: 'Total Matches', value: stats?.totalMatches, icon: Heart },
+              { label: 'Market Items', value: stats?.totalProducts, icon: ShoppingBag },
+            ].map(stat => (
+              <div key={stat.label} className="glass p-8 rounded-[2rem] flex items-center gap-6">
+                <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center text-brand">
+                  <stat.icon size={32} />
+                </div>
+                <div>
+                  <p className="text-3xl font-black tracking-tighter">{stat.value || 0}</p>
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{stat.label}</p>
+                </div>
               </div>
             ))}
+          </div>
+
+          {stats?.postStats && (
+            <div className="glass p-8 rounded-[2rem]">
+              <h2 className="text-xl font-black tracking-tighter mb-6">Post Distribution</h2>
+              <div className="flex gap-8">
+                {stats.postStats.map((s: any) => (
+                  <div key={s.type} className="flex flex-col">
+                    <span className="text-2xl font-black">{s.count}</span>
+                    <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{s.type}s</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'users' && (
+        <div className="glass rounded-[2.5rem] overflow-hidden">
+          <div className="p-8 border-b border-white/5 flex items-center justify-between">
+            <h2 className="text-xl font-black tracking-tighter">User Management</h2>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+              <input type="text" placeholder="Search users..." className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-2 text-sm" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 border-b border-white/5">
+                  <th className="px-8 py-6">User</th>
+                  <th className="px-8 py-6">Status</th>
+                  <th className="px-8 py-6">Level/Points</th>
+                  <th className="px-8 py-6">Joined</th>
+                  <th className="px-8 py-6">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {users.map(u => (
+                  <tr key={u.id} className="hover:bg-white/5 transition-all">
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`} alt="" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">{u.full_name}</p>
+                          <p className="text-xs text-white/40">@{u.username}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                        u.verification_status === 'verified' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : "bg-white/5 text-white/40 border-white/10"
+                      )}>
+                        {u.verification_status}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      <p className="text-sm font-bold">Lvl {u.level}</p>
+                      <p className="text-xs text-white/40">{u.points} pts</p>
+                    </td>
+                    <td className="px-8 py-6 text-xs text-white/40">
+                      {new Date(u.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-8 py-6">
+                      <button 
+                        onClick={() => setEditingUser(u)}
+                        className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-all"
+                      >
+                        <Settings size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      <div className="glass rounded-[2.5rem] overflow-hidden">
-        <div className="p-8 border-b border-white/5 flex items-center justify-between">
-          <h2 className="text-xl font-black tracking-tighter">User Management</h2>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-            <input type="text" placeholder="Search users..." className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-2 text-sm" />
+      {activeTab === 'withdrawals' && (
+        <div className="glass rounded-[2.5rem] overflow-hidden">
+          <div className="p-8 border-b border-white/5">
+            <h2 className="text-xl font-black tracking-tighter">Withdrawal Requests</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 border-b border-white/5">
+                  <th className="px-8 py-6">User ID</th>
+                  <th className="px-8 py-6">Amount</th>
+                  <th className="px-8 py-6">Method</th>
+                  <th className="px-8 py-6">Status</th>
+                  <th className="px-8 py-6">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {withdrawals.map(w => (
+                  <tr key={w.id} className="hover:bg-white/5 transition-all">
+                    <td className="px-8 py-6 font-bold text-sm">#{w.user_id}</td>
+                    <td className="px-8 py-6 font-black text-green-400">${w.amount}</td>
+                    <td className="px-8 py-6 text-xs font-bold">{w.method}</td>
+                   <td className="px-8 py-6">
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                        w.status === 'completed' ? "bg-green-500/10 text-green-500 border-green-500/20" : 
+                        w.status === 'pending' ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                      )}>
+                        {w.status}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      {w.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <button onClick={() => handleWithdrawalStatus(w.id, 'completed')} className="p-2 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all">
+                            <Check size={16} />
+                          </button>
+                          <button onClick={() => handleWithdrawalStatus(w.id, 'rejected')} className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 border-b border-white/5">
-                <th className="px-8 py-6">User</th>
-                <th className="px-8 py-6">Status</th>
-                <th className="px-8 py-6">Level/Points</th>
-                <th className="px-8 py-6">Joined</th>
-                <th className="px-8 py-6">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {users.map(u => (
-                <tr key={u.id} className="hover:bg-white/5 transition-all">
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`} alt="" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm">{u.full_name}</p>
-                        <p className="text-xs text-white/40">@{u.username}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                      u.verification_status === 'verified' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : "bg-white/5 text-white/40 border-white/10"
-                    )}>
-                      {u.verification_status}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <p className="text-sm font-bold">Lvl {u.level}</p>
-                    <p className="text-xs text-white/40">{u.points} pts</p>
-                  </td>
-                  <td className="px-8 py-6 text-xs text-white/40">
-                    {new Date(u.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-8 py-6">
-                    <button 
-                      onClick={() => setEditingUser(u)}
-                      className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-all"
-                    >
-                      <Settings size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       <AnimatePresence>
         {editingUser && (

@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 const db = new Database("styn.db");
 const JWT_SECRET = process.env.JWT_SECRET || "styn-enterprise-secret-2026";
+const POINTS_TO_MONEY_RATE = 0.001; // 1000 points = $1
 
 // --- DATABASE INITIALIZATION ---
 db.exec(`
@@ -117,10 +118,33 @@ db.exec(`
     media_url TEXT,
     type TEXT DEFAULT 'post', -- 'post', 'reel'
     likes_count INTEGER DEFAULT 0,
+    views_count INTEGER DEFAULT 0,
     is_deleted INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS post_views (
+    user_id INTEGER,
+    post_id INTEGER,
+    PRIMARY KEY(user_id, post_id),
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(post_id) REFERENCES posts(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS withdrawals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    amount REAL,
+    status TEXT DEFAULT 'pending', -- 'pending', 'completed', 'rejected'
+    payment_method TEXT,
+    payment_details TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
+
+  ALTER TABLE users ADD COLUMN verification_id_url TEXT;
+  ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0;
 
   CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,7 +377,7 @@ app.get("/api/users", authenticateToken, (req: any, res) => {
 });
 
 app.get("/api/users/:id", authenticateToken, (req: any, res) => {
-  const user = db.prepare("SELECT id, full_name, username, age, gender, location, bio, photos, cover_photo, verification_status, premium_type, last_seen, followers_count, following_count, points, level, relationship_status FROM users WHERE id = ?").get(req.params.id);
+  const user = db.prepare("SELECT id, full_name, username, age, gender, location, bio, photos, cover_photo, verification_status, premium_type, last_seen, followers_count, following_count, points, level, relationship_status, balance FROM users WHERE id = ?").get(req.params.id);
   if (!user) return res.status(404).json({ error: "User not found" });
   res.json(user);
 });
@@ -430,7 +454,61 @@ app.get("/api/products/saved", authenticateToken, (req: any, res) => {
   res.json(products);
 });
 
-// Admin
+app.post("/api/withdrawals", authenticateToken, (req: any, res) => {
+  const { amount, payment_method, payment_details } = req.body;
+  const user: any = db.prepare("SELECT points, balance FROM users WHERE id = ?").get(req.user.id);
+  
+  const moneyFromPoints = user.points * POINTS_TO_MONEY_RATE;
+  const totalAvailable = moneyFromPoints + user.balance;
+
+  if (amount > totalAvailable) {
+    return res.status(400).json({ error: "Insufficient funds" });
+  }
+
+  // Deduct points first if possible, then balance
+  let remainingToDeduct = amount;
+  if (moneyFromPoints >= remainingToDeduct) {
+    const pointsToDeduct = remainingToDeduct / POINTS_TO_MONEY_RATE;
+    db.prepare("UPDATE users SET points = points - ? WHERE id = ?").run(pointsToDeduct, req.user.id);
+  } else {
+    db.prepare("UPDATE users SET points = 0, balance = balance - ? WHERE id = ?").run(remainingToDeduct - moneyFromPoints, req.user.id);
+  }
+
+  db.prepare("INSERT INTO withdrawals (user_id, amount, payment_method, payment_details) VALUES (?, ?, ?, ?)").run(req.user.id, amount, payment_method, payment_details);
+  res.json({ success: true });
+});
+
+app.get("/api/withdrawals", authenticateToken, (req: any, res) => {
+  const withdrawals = db.prepare("SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC").all(req.user.id);
+  res.json(withdrawals);
+});
+
+app.get("/api/admin/withdrawals", authenticateToken, (req: any, res) => {
+  const admin: any = db.prepare("SELECT is_super_admin FROM users WHERE id = ?").get(req.user.id);
+  if (!admin?.is_super_admin) return res.sendStatus(403);
+  const withdrawals = db.prepare(`
+    SELECT withdrawals.*, users.username, users.email
+    FROM withdrawals
+    JOIN users ON withdrawals.user_id = users.id
+    ORDER BY created_at DESC
+  `).all();
+  res.json(withdrawals);
+});
+
+app.post("/api/admin/withdrawals/:id/status", authenticateToken, (req: any, res) => {
+  const admin: any = db.prepare("SELECT is_super_admin FROM users WHERE id = ?").get(req.user.id);
+  if (!admin?.is_super_admin) return res.sendStatus(403);
+  const { status } = req.body;
+  db.prepare("UPDATE withdrawals SET status = ? WHERE id = ?").run(status, req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/verify/pay", authenticateToken, (req: any, res) => {
+  // Simulate payment success
+  db.prepare("UPDATE users SET verification_status = 'verified', points = points + 100 WHERE id = ?").run(req.user.id);
+  res.json({ success: true });
+});
+
 app.put("/api/admin/users/:id", authenticateToken, (req: any, res) => {
   const admin: any = db.prepare("SELECT is_super_admin FROM users WHERE id = ?").get(req.user.id);
   if (!admin?.is_super_admin) return res.sendStatus(403);
@@ -443,7 +521,6 @@ app.put("/api/admin/users/:id", authenticateToken, (req: any, res) => {
   `).run(full_name, username, bio, verification_status, premium_type, points, level, req.params.id);
   res.json({ success: true });
 });
-
 app.get("/api/admin/stats", authenticateToken, (req: any, res) => {
   const admin: any = db.prepare("SELECT is_super_admin FROM users WHERE id = ?").get(req.user.id);
   if (!admin?.is_super_admin) return res.sendStatus(403);
@@ -507,8 +584,28 @@ app.post("/api/posts/:id/like", authenticateToken, (req: any, res) => {
   } else {
     db.prepare("INSERT INTO likes (user_id, post_id) VALUES (?, ?)").run(user_id, post_id);
     db.prepare("UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?").run(post_id);
+    // Award points for liking
+    db.prepare("UPDATE users SET points = points + 1 WHERE id = ?").run(user_id);
     res.json({ liked: true });
   }
+});
+
+app.post("/api/posts/:id/view", authenticateToken, (req: any, res) => {
+  const post_id = req.params.id;
+  const user_id = req.user.id;
+  const existing = db.prepare("SELECT * FROM post_views WHERE user_id = ? AND post_id = ?").get(user_id, post_id);
+  
+  if (!existing) {
+    db.prepare("INSERT INTO post_views (user_id, post_id) VALUES (?, ?)").run(user_id, post_id);
+    db.prepare("UPDATE posts SET views_count = views_count + 1 WHERE id = ?").run(post_id);
+    
+    // Award points to the post owner for the view
+    const post: any = db.prepare("SELECT user_id FROM posts WHERE id = ?").get(post_id);
+    if (post && post.user_id !== user_id) {
+      db.prepare("UPDATE users SET points = points + 0.1 WHERE id = ?").run(post.user_id);
+    }
+  }
+  res.json({ success: true });
 });
 
 app.get("/api/posts/:id/comments", (req, res) => {
@@ -528,6 +625,10 @@ app.post("/api/posts/:id/comments", authenticateToken, (req: any, res) => {
   const user_id = req.user.id;
   
   const info = db.prepare("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)").run(post_id, user_id, content);
+  
+  // Award points for commenting
+  db.prepare("UPDATE users SET points = points + 2 WHERE id = ?").run(user_id);
+
   const comment = db.prepare(`
     SELECT comments.*, users.username, users.photos as user_photos
     FROM comments
