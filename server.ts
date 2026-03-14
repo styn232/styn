@@ -465,7 +465,9 @@ app.get("/api/admin/stats", authenticateToken, (req: any, res) => {
 // Feed
 app.get("/api/posts", (req, res) => {
   const posts = db.prepare(`
-    SELECT posts.*, users.username, users.photos as user_photos, users.verification_status
+    SELECT posts.*, users.username, users.photos as user_photos, users.verification_status,
+    (SELECT COUNT(*) FROM likes WHERE post_id = posts.id) as likes_count,
+    (SELECT COUNT(*) FROM comments WHERE post_id = posts.id) as comments_count
     FROM posts
     JOIN users ON posts.user_id = users.id
     WHERE posts.is_deleted = 0
@@ -485,12 +487,54 @@ app.post("/api/posts", authenticateToken, (req: any, res) => {
   db.prepare("UPDATE users SET points = points + 5 WHERE id = ?").run(req.user.id);
   
   const post = db.prepare(`
-    SELECT posts.*, users.username, users.photos as user_photos, users.verification_status
+    SELECT posts.*, users.username, users.photos as user_photos, users.verification_status, 0 as likes_count, 0 as comments_count
     FROM posts
     JOIN users ON posts.user_id = users.id
     WHERE posts.id = ?
   `).get(info.lastInsertRowid);
   res.json(post);
+});
+
+app.post("/api/posts/:id/like", authenticateToken, (req: any, res) => {
+  const post_id = req.params.id;
+  const user_id = req.user.id;
+  const existing = db.prepare("SELECT * FROM likes WHERE user_id = ? AND post_id = ?").get(user_id, post_id);
+  
+  if (existing) {
+    db.prepare("DELETE FROM likes WHERE user_id = ? AND post_id = ?").run(user_id, post_id);
+    db.prepare("UPDATE posts SET likes_count = likes_count - 1 WHERE id = ?").run(post_id);
+    res.json({ liked: false });
+  } else {
+    db.prepare("INSERT INTO likes (user_id, post_id) VALUES (?, ?)").run(user_id, post_id);
+    db.prepare("UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?").run(post_id);
+    res.json({ liked: true });
+  }
+});
+
+app.get("/api/posts/:id/comments", (req, res) => {
+  const comments = db.prepare(`
+    SELECT comments.*, users.username, users.photos as user_photos
+    FROM comments
+    JOIN users ON comments.user_id = users.id
+    WHERE post_id = ?
+    ORDER BY created_at ASC
+  `).all(req.params.id);
+  res.json(comments);
+});
+
+app.post("/api/posts/:id/comments", authenticateToken, (req: any, res) => {
+  const { content } = req.body;
+  const post_id = req.params.id;
+  const user_id = req.user.id;
+  
+  const info = db.prepare("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)").run(post_id, user_id, content);
+  const comment = db.prepare(`
+    SELECT comments.*, users.username, users.photos as user_photos
+    FROM comments
+    JOIN users ON comments.user_id = users.id
+    WHERE comments.id = ?
+  `).get(info.lastInsertRowid);
+  res.json(comment);
 });
 
 // --- VITE MIDDLEWARE ---

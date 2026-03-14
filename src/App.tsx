@@ -90,8 +90,8 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 p-4">
-      <nav className="max-w-6xl mx-auto glass rounded-[2rem] px-8 py-3 flex items-center justify-between shadow-2xl shadow-black/50 border border-white/10">
+    <div className="fixed top-0 left-0 right-0 z-50 p-2 sm:p-4">
+      <nav className="max-w-6xl mx-auto glass rounded-2xl sm:rounded-[2rem] px-4 sm:px-8 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-black/50 border border-white/10">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
           <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-lg shadow-brand/20">
             <Zap className="text-white fill-white" size={24} />
@@ -283,6 +283,11 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
         </form>
 
         <div className="mt-8 flex flex-col gap-2 text-center">
+          <div className="p-4 bg-white/5 rounded-2xl border border-white/10 mb-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Admin Credentials</p>
+            <p className="text-xs font-bold">Email: jobsatespace@gmail.com</p>
+            <p className="text-xs font-bold">Password: admin123</p>
+          </div>
           {mode === 'login' && (
             <button 
               onClick={() => setMode('reset')}
@@ -303,6 +308,163 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
   );
 };
 
+const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdate: () => void, key?: any }) => {
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  const commentInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchComments = () => {
+    fetch(`/api/posts/${post.id}/comments`).then(res => res.json()).then(setComments);
+  };
+
+  useEffect(() => {
+    if (showComments) {
+      fetchComments();
+      setTimeout(() => commentInputRef.current?.focus(), 100);
+    }
+  }, [showComments]);
+
+  const handleLike = async () => {
+    const res = await fetch(`/api/posts/${post.id}/like`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    if (res.ok) onUpdate();
+  };
+
+  const handleComment = async () => {
+    if (!newComment.trim()) return;
+    const res = await fetch(`/api/posts/${post.id}/comments`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ content: newComment })
+    });
+    if (res.ok) {
+      setNewComment('');
+      fetchComments();
+      onUpdate();
+    }
+  };
+
+  const handleFollow = async () => {
+    const res = await fetch('/api/follow', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ following_id: post.user_id })
+    });
+    if (res.ok) setIsFollowing(true);
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+            <img src={post.user_photos ? JSON.parse(post.user_photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.username}`} alt={post.username} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm">@{post.username}</h3>
+              {post.verification_status === 'verified' && <Check size={12} className="text-blue-500" />}
+              {user.id !== post.user_id && !isFollowing && (
+                <button onClick={handleFollow} className="text-[10px] text-brand font-black uppercase tracking-widest hover:underline ml-2">Follow</button>
+              )}
+            </div>
+            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+              {new Date(post.created_at).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+        <button className="text-white/40 hover:text-white">
+          <MoreHorizontal size={20} />
+        </button>
+      </div>
+
+      <p className="text-white/80 leading-relaxed">{post.content}</p>
+
+      {post.media_url && (
+        <div className="rounded-2xl overflow-hidden border border-white/5 bg-black/20">
+          {post.media_url.endsWith('.mp4') ? (
+            <video src={post.media_url} className="w-full object-cover max-h-96" controls />
+          ) : (
+            <img src={post.media_url} alt="Post content" className="w-full object-cover max-h-96" />
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+        <button onClick={handleLike} className="flex items-center gap-2 text-white/40 hover:text-brand transition-all group">
+          <div className="p-2 rounded-xl group-hover:bg-brand/10 transition-all">
+            <Heart size={20} />
+          </div>
+          <span className="text-xs font-bold">{post.likes_count}</span>
+        </button>
+        <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-white/40 hover:text-blue-400 transition-all group">
+          <div className="p-2 rounded-xl group-hover:bg-blue-400/10 transition-all">
+            <MessageCircle size={20} />
+          </div>
+          <span className="text-xs font-bold">{post.comments_count}</span>
+        </button>
+        <button className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
+          <div className="p-2 rounded-xl group-hover:bg-green-400/10 transition-all">
+            <Share2 size={20} />
+          </div>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {showComments && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden space-y-4 pt-4"
+          >
+            <div className="flex gap-3">
+              <input 
+                ref={commentInputRef}
+                type="text" 
+                placeholder="Write a comment..." 
+                className="input-glass flex-1 text-sm"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleComment()}
+              />
+              <button onClick={handleComment} className="btn-primary p-2 rounded-xl"><Send size={18} /></button>
+            </div>
+            <div className="space-y-3">
+              {comments.map(c => (
+                <div key={c.id} className="flex gap-3">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/10">
+                    <img src={c.user_photos ? JSON.parse(c.user_photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.username}`} alt="" />
+                  </div>
+                  <div className="flex-1 bg-white/5 p-3 rounded-2xl">
+                    <p className="text-xs font-bold mb-1">@{c.username}</p>
+                    <p className="text-xs text-white/80">{c.content}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
 const FeedView = ({ user }: { user: UserData }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
@@ -311,10 +473,14 @@ const FeedView = ({ user }: { user: UserData }) => {
   const [postType, setPostType] = useState<'post' | 'reel'>('post');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const fetchPosts = () => {
     fetch('/api/posts')
       .then(res => res.json())
       .then(setPosts);
+  };
+
+  useEffect(() => {
+    fetchPosts();
   }, []);
 
   const handleCreatePost = async () => {
@@ -359,9 +525,9 @@ const FeedView = ({ user }: { user: UserData }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto pt-24 pb-32 px-4 space-y-6">
+    <div className="max-w-2xl mx-auto pt-20 sm:pt-24 pb-32 px-4 space-y-6">
       {/* Create Post */}
-      <div className="glass p-6 rounded-[2rem]">
+      <div className="glass p-4 sm:p-6 rounded-2xl sm:rounded-[2rem]">
         <div className="flex gap-4 mb-4">
           <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 shrink-0">
             <img 
@@ -439,58 +605,7 @@ const FeedView = ({ user }: { user: UserData }) => {
       {/* Posts List */}
       <AnimatePresence>
         {posts.map((post, idx) => (
-          <motion.div 
-            key={post.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className="glass p-6 rounded-[2rem] space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${post.username}`} alt={post.username} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm">@{post.username}</h3>
-                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
-                    {new Date(post.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <button className="text-white/40 hover:text-white">
-                <MoreHorizontal size={20} />
-              </button>
-            </div>
-
-            <p className="text-white/80 leading-relaxed">{post.content}</p>
-
-            {post.media_url && (
-              <div className="rounded-2xl overflow-hidden border border-white/5">
-                <img src={post.media_url} alt="Post content" className="w-full object-cover max-h-96" />
-              </div>
-            )}
-
-            <div className="flex items-center gap-6 pt-4 border-t border-white/5">
-              <button className="flex items-center gap-2 text-white/40 hover:text-brand transition-all group">
-                <div className="p-2 rounded-xl group-hover:bg-brand/10 transition-all">
-                  <Heart size={20} />
-                </div>
-                <span className="text-xs font-bold">{post.likes_count}</span>
-              </button>
-              <button className="flex items-center gap-2 text-white/40 hover:text-blue-400 transition-all group">
-                <div className="p-2 rounded-xl group-hover:bg-blue-400/10 transition-all">
-                  <MessageCircle size={20} />
-                </div>
-                <span className="text-xs font-bold">Reply</span>
-              </button>
-              <button className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
-                <div className="p-2 rounded-xl group-hover:bg-green-400/10 transition-all">
-                  <Share2 size={20} />
-                </div>
-              </button>
-            </div>
-          </motion.div>
+          <PostCard key={post.id} post={post} user={user} onUpdate={fetchPosts} />
         ))}
       </AnimatePresence>
     </div>
