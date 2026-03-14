@@ -146,6 +146,41 @@ db.exec(`
   ALTER TABLE users ADD COLUMN verification_id_url TEXT;
   ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0;
 
+  CREATE TABLE IF NOT EXISTS friend_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER,
+    receiver_id INTEGER,
+    status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'rejected'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(sender_id) REFERENCES users(id),
+    FOREIGN KEY(receiver_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+
+  -- Initialize default settings
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_to_money_rate', '0.001');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('paypal_client_id', '');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('paypal_secret', '');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_per_post', '10');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_per_follow', '5');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_per_like', '2');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_per_comment', '3');
+  INSERT OR IGNORE INTO site_settings (key, value) VALUES ('points_per_view', '1');
+
+  CREATE TABLE IF NOT EXISTS friend_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER,
+    receiver_id INTEGER,
+    status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'rejected'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(sender_id) REFERENCES users(id),
+    FOREIGN KEY(receiver_id) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     post_id INTEGER,
@@ -168,17 +203,12 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     from_user_id INTEGER,
-    type TEXT, -- 'match', 'message', 'like', 'view'
+    type TEXT, -- 'match', 'message', 'like', 'view', 'friend_request', 'profile_update'
     content TEXT,
     is_read INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(from_user_id) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS site_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
   );
 `);
 
@@ -230,6 +260,20 @@ if (!fs.existsSync('public/uploads')) {
   fs.mkdirSync('public/uploads', { recursive: true });
 }
 app.use('/uploads', express.static('public/uploads'));
+
+// --- HELPERS ---
+const getSetting = (key: string, defaultValue: string) => {
+  const setting = db.prepare('SELECT value FROM site_settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return setting ? setting.value : defaultValue;
+};
+
+const updatePoints = (userId: number, points: number) => {
+  db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(points, userId);
+};
+
+const createNotification = (userId: number, fromId: number, type: string, content: string) => {
+  db.prepare('INSERT INTO notifications (user_id, from_user_id, type, content) VALUES (?, ?, ?, ?)').run(userId, fromId, type, content);
+};
 
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
@@ -384,12 +428,38 @@ app.get("/api/users/:id", authenticateToken, (req: any, res) => {
 
 app.put("/api/profile/update", authenticateToken, (req: any, res) => {
   const { full_name, bio, location, gender, interested_in, age, photos, cover_photo, relationship_status } = req.body;
+  const userId = req.user.id;
+
+  const oldUser = db.prepare('SELECT photos, cover_photo FROM users WHERE id = ?').get(userId) as any;
+
   db.prepare(`
     UPDATE users 
     SET full_name = ?, bio = ?, location = ?, gender = ?, interested_in = ?, age = ?, photos = ?, cover_photo = ?, relationship_status = ?
     WHERE id = ?
-  `).run(full_name, bio, location, gender, interested_in, age, photos, cover_photo, relationship_status, req.user.id);
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  `).run(full_name, bio, location, gender, interested_in, age, photos, cover_photo, relationship_status, userId);
+
+  // Create post if profile picture or cover photo changed
+  if (photos && photos !== oldUser.photos) {
+    try {
+      const photoUrl = JSON.parse(photos)[0];
+      db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
+        userId, "Updated profile picture", photoUrl, "post"
+      );
+    } catch (e) {}
+  }
+  if (cover_photo && cover_photo !== oldUser.cover_photo) {
+    db.prepare('INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)').run(
+      userId, "Updated cover photo", cover_photo, "post"
+    );
+  }
+
+  // Notify followers
+  const followers = db.prepare('SELECT follower_id FROM follows WHERE following_id = ?').all(userId) as any[];
+  followers.forEach(f => {
+    createNotification(f.follower_id, userId, 'profile_update', `${req.user.username} updated their profile`);
+  });
+
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   res.json(user);
 });
 
@@ -400,6 +470,11 @@ app.post("/api/follow", authenticateToken, (req: any, res) => {
     db.prepare("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)").run(follower_id, following_id);
     db.prepare("UPDATE users SET following_count = following_count + 1 WHERE id = ?").run(follower_id);
     db.prepare("UPDATE users SET followers_count = followers_count + 1 WHERE id = ?").run(following_id);
+    
+    // Award points for following
+    const points = parseInt(getSetting('points_per_follow', '5'));
+    updatePoints(follower_id, points);
+
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: "Already following" });
@@ -550,6 +625,7 @@ app.get("/api/posts", (req, res) => {
     WHERE posts.is_deleted = 0
     ORDER BY 
       CASE WHEN users.verification_status = 'verified' THEN 0 ELSE 1 END,
+      likes_count DESC,
       posts.created_at DESC
     LIMIT 50
   `).all();
@@ -561,7 +637,8 @@ app.post("/api/posts", authenticateToken, (req: any, res) => {
   const info = db.prepare("INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)").run(req.user.id, content, media_url, type || 'post');
   
   // Award points for posting
-  db.prepare("UPDATE users SET points = points + 5 WHERE id = ?").run(req.user.id);
+  const points = parseInt(getSetting('points_per_post', '10'));
+  updatePoints(req.user.id, points);
   
   const post = db.prepare(`
     SELECT posts.*, users.username, users.photos as user_photos, users.verification_status, 0 as likes_count, 0 as comments_count
@@ -570,6 +647,101 @@ app.post("/api/posts", authenticateToken, (req: any, res) => {
     WHERE posts.id = ?
   `).get(info.lastInsertRowid);
   res.json(post);
+});
+
+app.put("/api/posts/:id", authenticateToken, (req: any, res) => {
+  const { content } = req.body;
+  const post = db.prepare("SELECT * FROM posts WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+  if (!post) return res.status(403).json({ error: "Unauthorized" });
+
+  db.prepare("UPDATE posts SET content = ? WHERE id = ?").run(content, req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/posts/:id/repost", authenticateToken, (req: any, res) => {
+  const originalPost = db.prepare("SELECT * FROM posts WHERE id = ?").get(req.params.id) as any;
+  if (!originalPost) return res.status(404).json({ error: "Post not found" });
+
+  const content = `Reposted from @${db.prepare('SELECT username FROM users WHERE id = ?').get(originalPost.user_id).username}: ${originalPost.content}`;
+  db.prepare("INSERT INTO posts (user_id, content, media_url, type) VALUES (?, ?, ?, ?)").run(
+    req.user.id, content, originalPost.media_url, originalPost.type
+  );
+  res.json({ success: true });
+});
+
+// --- FRIEND REQUESTS ---
+app.post("/api/friend-requests", authenticateToken, (req: any, res) => {
+  const { receiver_id } = req.body;
+  const sender_id = req.user.id;
+
+  try {
+    db.prepare('INSERT INTO friend_requests (sender_id, receiver_id) VALUES (?, ?)').run(sender_id, receiver_id);
+    createNotification(receiver_id, sender_id, 'friend_request', `${req.user.username} sent you a friend request`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: "Request already exists" });
+  }
+});
+
+app.post("/api/friend-requests/:id/accept", authenticateToken, (req: any, res) => {
+  const requestId = req.params.id;
+  const request = db.prepare('SELECT * FROM friend_requests WHERE id = ? AND receiver_id = ?').get(requestId, req.user.id) as any;
+  if (!request) return res.status(404).json({ error: "Request not found" });
+
+  db.prepare('UPDATE friend_requests SET status = "accepted" WHERE id = ?').run(requestId);
+  
+  // Also make them follow each other
+  try {
+    db.prepare('INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)').run(request.sender_id, request.receiver_id);
+    db.prepare('INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)').run(request.receiver_id, request.sender_id);
+  } catch (e) {}
+
+  createNotification(request.sender_id, req.user.id, 'friend_request_accepted', `${req.user.username} accepted your friend request`);
+  res.json({ success: true });
+});
+
+app.get("/api/friend-requests", authenticateToken, (req: any, res) => {
+  const requests = db.prepare(`
+    SELECT fr.*, u.username, u.full_name, u.photos
+    FROM friend_requests fr
+    JOIN users u ON u.id = fr.sender_id
+    WHERE fr.receiver_id = ? AND fr.status = 'pending'
+  `).all(req.user.id);
+  res.json(requests);
+});
+
+// --- SUGGESTIONS ---
+app.get("/api/users/suggested", authenticateToken, (req: any, res) => {
+  const suggested = db.prepare(`
+    SELECT id, username, full_name, photos, followers_count
+    FROM users
+    WHERE id != ? AND id NOT IN (SELECT following_id FROM follows WHERE follower_id = ?)
+    ORDER BY followers_count DESC
+    LIMIT 5
+  `).all(req.user.id, req.user.id);
+  res.json(suggested);
+});
+
+// --- ADMIN SETTINGS ---
+app.get("/api/admin/settings", authenticateToken, (req: any, res) => {
+  const admin = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(req.user.id) as any;
+  if (!admin?.is_super_admin) return res.status(403).json({ error: "Unauthorized" });
+
+  const settings = db.prepare('SELECT * FROM site_settings').all();
+  res.json(settings);
+});
+
+app.put("/api/admin/settings", authenticateToken, (req: any, res) => {
+  const admin = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(req.user.id) as any;
+  if (!admin?.is_super_admin) return res.status(403).json({ error: "Unauthorized" });
+
+  const { settings } = req.body; // Array of {key, value}
+  const stmt = db.prepare('UPDATE site_settings SET value = ? WHERE key = ?');
+  const updateMany = db.transaction((items) => {
+    for (const item of items) stmt.run(item.value, item.key);
+  });
+  updateMany(settings);
+  res.json({ success: true });
 });
 
 app.post("/api/posts/:id/like", authenticateToken, (req: any, res) => {

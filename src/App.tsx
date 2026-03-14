@@ -78,10 +78,11 @@ interface UserData {
 }
 
 const getStatusTier = (points: number) => {
-  if (points >= 10000) return { name: 'Platinum', color: 'text-purple-400', bg: 'bg-purple-400/10', border: 'border-purple-400/20' };
-  if (points >= 5000) return { name: 'Gold', color: 'text-yellow-400', bg: 'bg-yellow-400/10', border: 'border-yellow-400/20' };
-  if (points >= 1000) return { name: 'Silver', color: 'text-gray-300', bg: 'bg-gray-300/10', border: 'border-gray-300/20' };
-  return { name: 'Bronze', color: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/20' };
+  if (points >= 10000) return { name: 'Platinum', color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-500/20' };
+  if (points >= 5000) return { name: 'Gold', color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' };
+  if (points >= 2500) return { name: 'Silver', color: 'text-slate-400', bg: 'bg-slate-400/10', border: 'border-slate-400/20' };
+  if (points >= 1000) return { name: 'Bronze', color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' };
+  return { name: 'General', color: 'text-black/40', bg: 'bg-black/5', border: 'border-black/10' };
 };
 
 const POINTS_TO_MONEY_RATE = 0.001;
@@ -89,6 +90,7 @@ const POINTS_TO_MONEY_RATE = 0.001;
 // --- COMPONENTS ---
 
 const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: View) => void, user: UserData | null }) => {
+  const [showNotifications, setShowNotifications] = useState(false);
   const navItems = [
     { id: 'home', icon: LayoutDashboard, label: 'Feed' },
     { id: 'dating', icon: Flame, label: 'Dating' },
@@ -134,7 +136,7 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
         </div>
 
         <div className="flex items-center gap-4">
-          <button className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all relative">
+          <button onClick={() => setShowNotifications(true)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all relative">
             <Bell size={18} className="text-white/60" />
             <span className="absolute top-2 right-2 w-2 h-2 bg-brand rounded-full border-2 border-[#0A0A0A]" />
           </button>
@@ -147,6 +149,7 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
           </div>
         </div>
       </nav>
+      {showNotifications && user && <NotificationsModal user={user} onClose={() => setShowNotifications(false)} />}
     </div>
   );
 };
@@ -163,7 +166,87 @@ const ShoppingBag = ({ size, className }: { size?: number, className?: string })
   </svg>
 );
 
-// --- VIEWS ---
+const NotificationsModal = ({ user, onClose }: { user: UserData, onClose: () => void }) => {
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [friendRequests, setFriendRequests] = useState<any[]>([]);
+
+  const fetchAll = () => {
+    fetch('/api/notifications', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setNotifications);
+    fetch('/api/friend-requests', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setFriendRequests);
+  };
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  const handleAcceptFriend = async (id: number) => {
+    const res = await fetch(`/api/friend-requests/${id}/accept`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    if (res.ok) fetchAll();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md glass rounded-[2.5rem] overflow-hidden flex flex-col max-h-[80vh]"
+      >
+        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+          <h2 className="text-xl font-black tracking-tighter">Notifications</h2>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-all"><X size={20} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {friendRequests.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-brand">Friend Requests</h3>
+              {friendRequests.map(fr => (
+                <div key={fr.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+                      <img src={fr.photos ? JSON.parse(fr.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${fr.username}`} alt="" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">@{fr.username}</p>
+                      <p className="text-[10px] text-white/40 uppercase tracking-widest">Wants to be friends</p>
+                    </div>
+                  </div>
+                  <button onClick={() => handleAcceptFriend(fr.id)} className="bg-brand text-white p-2 rounded-xl hover:scale-110 transition-all"><Check size={18} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">Recent Activity</h3>
+            {notifications.length > 0 ? notifications.map(n => (
+              <div key={n.id} className="flex gap-3 bg-white/5 p-4 rounded-2xl border border-white/5">
+                <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center text-brand shrink-0">
+                  {n.type === 'like' && <Heart size={14} fill="currentColor" />}
+                  {n.type === 'match' && <Flame size={14} fill="currentColor" />}
+                  {n.type === 'profile_update' && <User size={14} />}
+                  {n.type === 'friend_request_accepted' && <Check size={14} />}
+                </div>
+                <div>
+                  <p className="text-xs text-white/80">{n.content}</p>
+                  <p className="text-[8px] text-white/20 uppercase tracking-widest mt-1">{new Date(n.created_at).toLocaleTimeString()}</p>
+                </div>
+              </div>
+            )) : (
+              <div className="text-center py-8 text-white/20">
+                <Bell size={32} className="mx-auto mb-2 opacity-20" />
+                <p className="text-xs font-bold uppercase tracking-widest">No notifications yet</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 
 const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
@@ -326,6 +409,8 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
   const [newComment, setNewComment] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
   const [hasViewed, setHasViewed] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content);
 
   const commentInputRef = useRef<HTMLInputElement>(null);
 
@@ -391,6 +476,32 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
     if (res.ok) setIsFollowing(true);
   };
 
+  const handleEdit = async () => {
+    const res = await fetch(`/api/posts/${post.id}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ content: editContent })
+    });
+    if (res.ok) {
+      setIsEditing(false);
+      onUpdate();
+    }
+  };
+
+  const handleRepost = async () => {
+    const res = await fetch(`/api/posts/${post.id}/repost`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    if (res.ok) {
+      alert("Reposted to your profile!");
+      onUpdate();
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -415,12 +526,33 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
             </p>
           </div>
         </div>
-        <button className="text-white/40 hover:text-white">
-          <MoreHorizontal size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          {user.id === post.user_id && (
+            <button onClick={() => setIsEditing(!isEditing)} className="text-white/40 hover:text-white p-2">
+              <Settings size={16} />
+            </button>
+          )}
+          <button className="text-white/40 hover:text-white">
+            <MoreHorizontal size={20} />
+          </button>
+        </div>
       </div>
 
-      <p className="text-white/80 leading-relaxed">{post.content}</p>
+      {isEditing ? (
+        <div className="space-y-3">
+          <textarea 
+            className="input-glass w-full min-h-[100px]" 
+            value={editContent} 
+            onChange={e => setEditContent(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button onClick={handleEdit} className="btn-primary px-4 py-2 text-xs">Save</button>
+            <button onClick={() => setIsEditing(false)} className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-xs">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-white/80 leading-relaxed">{post.content}</p>
+      )}
 
       {post.media_url && (
         <div className="rounded-2xl overflow-hidden border border-white/5 bg-black/20">
@@ -451,10 +583,11 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
           </div>
           <span className="text-[10px] font-black">{post.views_count || 0}</span>
         </div>
-        <button className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
+        <button onClick={handleRepost} className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
           <div className="p-2 rounded-xl group-hover:bg-green-400/10 transition-all">
             <Share2 size={20} />
           </div>
+          <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Repost</span>
         </button>
       </div>
 
@@ -498,7 +631,61 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
   );
 };
 
-const FeedView = ({ user }: { user: UserData }) => {
+const SuggestedFriends = ({ user, onFollow }: { user: UserData, onFollow: () => void }) => {
+  const [suggested, setSuggested] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/users/suggested', {
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    }).then(res => res.json()).then(setSuggested);
+  }, []);
+
+  const handleRequest = async (id: number) => {
+    const res = await fetch('/api/friend-requests', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ receiver_id: id })
+    });
+    if (res.ok) {
+      alert("Friend request sent!");
+      setSuggested(suggested.filter(s => s.id !== id));
+    }
+  };
+
+  if (suggested.length === 0) return null;
+
+  return (
+    <div className="glass p-6 rounded-[2rem] space-y-4">
+      <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Suggested for you</h3>
+      <div className="space-y-4">
+        {suggested.map(s => (
+          <div key={s.id} className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+                <img src={s.photos ? JSON.parse(s.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.username}`} alt="" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">{s.full_name}</p>
+                <p className="text-[10px] text-white/40">@{s.username}</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => handleRequest(s.id)}
+              className="p-2 rounded-lg bg-brand/10 text-brand hover:bg-brand hover:text-white transition-all"
+            >
+              <UserPlus size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: () => void }) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -558,8 +745,9 @@ const FeedView = ({ user }: { user: UserData }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto pt-20 sm:pt-24 pb-32 px-4 space-y-6">
-      {/* Create Post */}
+    <div className="max-w-6xl mx-auto pt-20 sm:pt-24 pb-32 px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-2 space-y-6">
+        {/* Create Post */}
       <div className="glass p-4 sm:p-6 rounded-2xl sm:rounded-[2rem]">
         <div className="flex gap-4 mb-4">
           <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 shrink-0">
@@ -639,8 +827,24 @@ const FeedView = ({ user }: { user: UserData }) => {
       <AnimatePresence>
         {posts.map((post, idx) => (
           <PostCard key={post.id} post={post} user={user} onUpdate={fetchPosts} />
-        ))}
-      </AnimatePresence>
+        </AnimatePresence>
+      </div>
+
+      {/* Sidebar */}
+      <div className="hidden lg:block space-y-6">
+        <SuggestedFriends user={user} onFollow={onFollowUpdate} />
+        <div className="glass p-6 rounded-[2rem] space-y-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Trending Topics</h3>
+          <div className="space-y-2">
+            {['#STYN', '#Social', '#Dating', '#Reels'].map(tag => (
+              <div key={tag} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 cursor-pointer transition-all">
+                <span className="text-sm font-bold">{tag}</span>
+                <span className="text-[10px] text-white/40">1.2k posts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1549,24 +1753,42 @@ const ReelsView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: (
     }
   };
 
+  const handleLike = async (id: number) => {
+    await fetch(`/api/posts/${id}/like`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    setReels(reels.map(r => r.id === id ? { ...r, likes_count: r.likes_count + 1 } : r));
+  };
+
+  const handleRepost = async (id: number) => {
+    const res = await fetch(`/api/posts/${id}/repost`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    });
+    if (res.ok) alert("Reposted!");
+  };
+
   return (
     <div className="h-screen bg-black flex items-center justify-center">
       <div className="h-full max-h-[900px] aspect-[9/16] relative bg-zinc-900 rounded-[3rem] overflow-hidden shadow-2xl border border-white/5">
         {reels.length > 0 ? (
           <div className="h-full w-full relative">
             <video 
+              key={reels[currentIndex].media_url}
               src={reels[currentIndex].media_url} 
               className="w-full h-full object-cover"
-              autoPlay loop muted
+              autoPlay loop
+              playsInline
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             
             <div className="absolute bottom-8 left-8 right-20 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/20">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${reels[currentIndex].username}`} alt="" />
+                  <img src={reels[currentIndex].user_photos ? JSON.parse(reels[currentIndex].user_photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${reels[currentIndex].username}`} alt="" />
                 </div>
-                <h4 className="font-black text-sm">@{reels[currentIndex].username}</h4>
+                <h4 className="font-black text-sm text-white">@{reels[currentIndex].username}</h4>
                 <button 
                   onClick={() => handleFollow(reels[currentIndex].user_id)}
                   className="bg-brand text-white px-4 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest"
@@ -1578,20 +1800,20 @@ const ReelsView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: (
             </div>
 
             <div className="absolute bottom-8 right-4 flex flex-col gap-6">
-              <button className="flex flex-col items-center gap-1 group">
-                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-brand/20 transition-all">
+              <button onClick={() => handleLike(reels[currentIndex].id)} className="flex flex-col items-center gap-1 group">
+                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-brand/20 transition-all text-white">
                   <Heart size={24} />
                 </div>
-                <span className="text-[10px] font-black">{reels[currentIndex].likes_count}</span>
+                <span className="text-[10px] font-black text-white">{reels[currentIndex].likes_count}</span>
               </button>
               <button className="flex flex-col items-center gap-1 group">
-                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-blue-400/20 transition-all">
+                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-blue-400/20 transition-all text-white">
                   <MessageCircle size={24} />
                 </div>
-                <span className="text-[10px] font-black">42</span>
+                <span className="text-[10px] font-black text-white">{reels[currentIndex].comments_count || 0}</span>
               </button>
-              <button className="flex flex-col items-center gap-1 group">
-                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-green-400/20 transition-all">
+              <button onClick={() => handleRepost(reels[currentIndex].id)} className="flex flex-col items-center gap-1 group">
+                <div className="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:bg-green-400/20 transition-all text-white">
                   <Share2 size={24} />
                 </div>
               </button>
@@ -1617,12 +1839,14 @@ const AdminView = ({ user }: { user: UserData }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'withdrawals'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'withdrawals' | 'settings'>('stats');
+  const [settings, setSettings] = useState<any[]>([]);
 
   const fetchStats = () => {
     fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setStats);
     fetch('/api/users', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setUsers);
-    fetch('/api/withdrawals', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setWithdrawals);
+    fetch('/api/admin/withdrawals', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setWithdrawals);
+    fetch('/api/admin/settings', { headers: { 'Authorization': `Bearer ${user.token}` } }).then(res => res.json()).then(setSettings);
   };
 
   useEffect(() => {
@@ -1646,8 +1870,8 @@ const AdminView = ({ user }: { user: UserData }) => {
   };
 
   const handleWithdrawalStatus = async (id: number, status: string) => {
-    const res = await fetch(`/api/admin/withdrawals/${id}`, {
-      method: 'PUT',
+    const res = await fetch(`/api/admin/withdrawals/${id}/status`, {
+      method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${user.token}`
@@ -1657,12 +1881,24 @@ const AdminView = ({ user }: { user: UserData }) => {
     if (res.ok) fetchStats();
   };
 
+  const handleUpdateSettings = async () => {
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.token}`
+      },
+      body: JSON.stringify({ settings })
+    });
+    if (res.ok) alert("Settings updated!");
+  };
+
   return (
     <div className="max-w-7xl mx-auto pt-28 pb-32 px-4 space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-black tracking-tighter">Admin Dashboard</h1>
         <div className="flex gap-2 p-1 glass rounded-2xl">
-          {(['stats', 'users', 'withdrawals'] as const).map(tab => (
+          {(['stats', 'users', 'withdrawals', 'settings'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1714,6 +1950,31 @@ const AdminView = ({ user }: { user: UserData }) => {
         </>
       )}
 
+      {activeTab === 'settings' && (
+        <div className="glass p-8 rounded-[2.5rem] space-y-6">
+          <h2 className="text-xl font-black tracking-tighter">Site Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {settings.map((s, idx) => (
+              <div key={s.key} className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/40">{s.key.replace(/_/g, ' ')}</label>
+                <input 
+                  type="text" 
+                  className="input-glass w-full" 
+                  value={s.value} 
+                  onChange={e => {
+                    const newSettings = [...settings];
+                    newSettings[idx].value = e.target.value;
+                    setSettings(newSettings);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <button onClick={handleUpdateSettings} className="btn-primary px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-xs">
+            Save Settings
+          </button>
+        </div>
+      )}
       {activeTab === 'users' && (
         <div className="glass rounded-[2.5rem] overflow-hidden">
           <div className="p-8 border-b border-white/5 flex items-center justify-between">
@@ -1957,7 +2218,7 @@ export default function App() {
             exit={{ opacity: 0, scale: 1.02 }}
             transition={{ duration: 0.2 }}
           >
-            {view === 'home' && user && <FeedView user={user} />}
+            {view === 'home' && user && <FeedView user={user} onFollowUpdate={fetchUser} />}
             {view === 'dating' && user && <DatingView user={user} />}
             {view === 'chat' && user && <ChatView user={user} />}
             {view === 'profile' && user && <ProfileView user={user} onLogout={handleLogout} onUpdate={fetchUser} />}

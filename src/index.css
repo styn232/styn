@@ -6,23 +6,23 @@
   
   --color-brand: #FF385C;
   --color-brand-dark: #E31C5F;
-  --color-glass: rgba(255, 255, 255, 0.05);
-  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-glass: rgba(0, 0, 0, 0.05);
+  --color-glass-border: rgba(0, 0, 0, 0.1);
 }
 
 @layer base {
   body {
-    @apply bg-[#0A0A0A] text-white antialiased;
+    @apply bg-[#F8F9FA] text-[#1A1A1B] antialiased;
     font-feature-settings: "ss01", "ss02", "cv01", "cv02";
   }
 }
 
 .glass {
-  @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  @apply bg-white/80 backdrop-blur-md border border-black/5 shadow-sm;
 }
 
 .glass-dark {
-  @apply bg-black/40 backdrop-blur-2xl border border-white/5;
+  @apply bg-black/5 backdrop-blur-2xl border border-black/5;
 }
 
 .text-gradient {
@@ -34,7 +34,7 @@
 }
 
 .input-glass {
-  @apply bg-white/5 border border-white/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-brand/50 transition-all;
+  @apply bg-black/5 border border-black/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-brand/50 transition-all text-[#1A1A1B];
 }
 
 /* Custom Scrollbar */
@@ -45,5 +45,5 @@
   @apply bg-transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-white/10 rounded-full hover:bg-white/20 transition-all;
+  @apply bg-black/10 rounded-full hover:bg-black/20 transition-all;
 }
