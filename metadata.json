@@ -1,6 +1,6 @@
 {
-  "name": "STYN - Social, Dating & Entertainment",
-  "description": "A hybrid social media platform combining networking, dating, short reels, and real-time messaging with a gamified reward system.",
+  "name": "STYN",
+  "description": "Enterprise-level Dating Social Network platform combining Facebook, Tinder, and WhatsApp features.",
   "requestFramePermissions": [
     "camera",
     "microphone",
