@@ -27,7 +27,9 @@ import {
   LayoutDashboard,
   DollarSign,
   MapPin,
-  Upload
+  Upload,
+  UserPlus,
+  CreditCard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
@@ -105,7 +107,7 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 p-2 sm:p-4">
-      <nav className="max-w-6xl mx-auto glass rounded-2xl sm:rounded-[2rem] px-4 sm:px-8 py-2 sm:py-3 flex items-center justify-between shadow-2xl shadow-black/50 border border-white/10">
+      <nav className="max-w-6xl mx-auto glass rounded-2xl sm:rounded-[2rem] px-4 sm:px-8 py-2 sm:py-3 flex items-center justify-between shadow-xl shadow-black/5 border border-black/5">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
           <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-lg shadow-brand/20">
             <Zap className="text-white fill-white" size={24} />
@@ -120,7 +122,7 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
               onClick={() => setView(item.id as View)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-2xl transition-all relative group",
-                activeView === item.id ? "bg-brand/10 text-brand" : "text-white/40 hover:text-white hover:bg-white/5"
+                activeView === item.id ? "bg-brand/10 text-brand" : "text-black/40 hover:text-black hover:bg-black/5"
               )}
             >
               <item.icon size={20} />
@@ -136,11 +138,11 @@ const Navbar = ({ activeView, setView, user }: { activeView: View, setView: (v: 
         </div>
 
         <div className="flex items-center gap-4">
-          <button onClick={() => setShowNotifications(true)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all relative">
-            <Bell size={18} className="text-white/60" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-brand rounded-full border-2 border-[#0A0A0A]" />
+          <button onClick={() => setShowNotifications(true)} className="p-2 rounded-xl bg-black/5 hover:bg-black/10 transition-all relative">
+            <Bell size={18} className="text-black/60" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-brand rounded-full border-2 border-[#F8F9FA]" />
           </button>
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 cursor-pointer" onClick={() => setView('profile')}>
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-black/10 cursor-pointer" onClick={() => setView('profile')}>
             <img 
               src={user?.photos ? JSON.parse(user.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`} 
               alt="Profile" 
@@ -188,15 +190,15 @@ const NotificationsModal = ({ user, onClose }: { user: UserData, onClose: () => 
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-md glass rounded-[2.5rem] overflow-hidden flex flex-col max-h-[80vh]"
       >
-        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+        <div className="p-6 border-b border-black/5 flex items-center justify-between">
           <h2 className="text-xl font-black tracking-tighter">Notifications</h2>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-all"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-black/5 rounded-xl transition-all"><X size={20} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -204,14 +206,14 @@ const NotificationsModal = ({ user, onClose }: { user: UserData, onClose: () => 
             <div className="space-y-3">
               <h3 className="text-[10px] font-black uppercase tracking-widest text-brand">Friend Requests</h3>
               {friendRequests.map(fr => (
-                <div key={fr.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10">
+                <div key={fr.id} className="flex items-center justify-between bg-black/5 p-4 rounded-2xl border border-black/10">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden border border-black/10">
                       <img src={fr.photos ? JSON.parse(fr.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${fr.username}`} alt="" />
                     </div>
                     <div>
                       <p className="text-sm font-bold">@{fr.username}</p>
-                      <p className="text-[10px] text-white/40 uppercase tracking-widest">Wants to be friends</p>
+                      <p className="text-[10px] text-black/40 uppercase tracking-widest">Wants to be friends</p>
                     </div>
                   </div>
                   <button onClick={() => handleAcceptFriend(fr.id)} className="bg-brand text-white p-2 rounded-xl hover:scale-110 transition-all"><Check size={18} /></button>
@@ -221,9 +223,9 @@ const NotificationsModal = ({ user, onClose }: { user: UserData, onClose: () => 
           )}
 
           <div className="space-y-3">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-white/40">Recent Activity</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-black/40">Recent Activity</h3>
             {notifications.length > 0 ? notifications.map(n => (
-              <div key={n.id} className="flex gap-3 bg-white/5 p-4 rounded-2xl border border-white/5">
+              <div key={n.id} className="flex gap-3 bg-black/5 p-4 rounded-2xl border border-black/5">
                 <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center text-brand shrink-0">
                   {n.type === 'like' && <Heart size={14} fill="currentColor" />}
                   {n.type === 'match' && <Flame size={14} fill="currentColor" />}
@@ -231,12 +233,12 @@ const NotificationsModal = ({ user, onClose }: { user: UserData, onClose: () => 
                   {n.type === 'friend_request_accepted' && <Check size={14} />}
                 </div>
                 <div>
-                  <p className="text-xs text-white/80">{n.content}</p>
-                  <p className="text-[8px] text-white/20 uppercase tracking-widest mt-1">{new Date(n.created_at).toLocaleTimeString()}</p>
+                  <p className="text-xs text-black/80">{n.content}</p>
+                  <p className="text-[8px] text-black/20 uppercase tracking-widest mt-1">{new Date(n.created_at).toLocaleTimeString()}</p>
                 </div>
               </div>
             )) : (
-              <div className="text-center py-8 text-white/20">
+              <div className="text-center py-8 text-black/20">
                 <Bell size={32} className="mx-auto mb-2 opacity-20" />
                 <p className="text-xs font-bold uppercase tracking-widest">No notifications yet</p>
               </div>
@@ -358,9 +360,9 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
                 value={formData.gender}
                 onChange={e => setFormData({...formData, gender: e.target.value})}
               >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
+                <option value="Male" className="bg-white text-black">Male</option>
+                <option value="Female" className="bg-white text-black">Female</option>
+                <option value="Other" className="bg-white text-black">Other</option>
               </select>
               <input 
                 type="number" 
@@ -378,22 +380,22 @@ const AuthView = ({ onLogin }: { onLogin: (u: UserData) => void }) => {
         </form>
 
         <div className="mt-8 flex flex-col gap-2 text-center">
-          <div className="p-4 bg-white/5 rounded-2xl border border-white/10 mb-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">Admin Credentials</p>
+          <div className="p-4 bg-black/5 rounded-2xl border border-black/10 mb-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-black/40 mb-2">Admin Credentials</p>
             <p className="text-xs font-bold">Email: jobsatespace@gmail.com</p>
             <p className="text-xs font-bold">Password: admin123</p>
           </div>
           {mode === 'login' && (
             <button 
               onClick={() => setMode('reset')}
-              className="text-white/40 hover:text-white transition-all text-sm font-bold"
+              className="text-black/40 hover:text-black transition-all text-sm font-bold"
             >
               Forgot Password?
             </button>
           )}
           <button 
             onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-            className="text-white/40 hover:text-white transition-all text-sm font-bold"
+            className="text-black/40 hover:text-black transition-all text-sm font-bold"
           >
             {mode === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
           </button>
@@ -510,7 +512,7 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-black/10">
             <img src={post.user_photos ? JSON.parse(post.user_photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.username}`} alt={post.username} />
           </div>
           <div>
@@ -521,18 +523,18 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
                 <button onClick={handleFollow} className="text-[10px] text-brand font-black uppercase tracking-widest hover:underline ml-2">Follow</button>
               )}
             </div>
-            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+            <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">
               {new Date(post.created_at).toLocaleDateString()}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {user.id === post.user_id && (
-            <button onClick={() => setIsEditing(!isEditing)} className="text-white/40 hover:text-white p-2">
+            <button onClick={() => setIsEditing(!isEditing)} className="text-black/40 hover:text-black p-2">
               <Settings size={16} />
             </button>
           )}
-          <button className="text-white/40 hover:text-white">
+          <button className="text-black/40 hover:text-black">
             <MoreHorizontal size={20} />
           </button>
         </div>
@@ -551,11 +553,11 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
           </div>
         </div>
       ) : (
-        <p className="text-white/80 leading-relaxed">{post.content}</p>
+        <p className="text-black/80 leading-relaxed">{post.content}</p>
       )}
 
       {post.media_url && (
-        <div className="rounded-2xl overflow-hidden border border-white/5 bg-black/20">
+        <div className="rounded-2xl overflow-hidden border border-black/5 bg-black/20">
           {post.media_url.endsWith('.mp4') ? (
             <video src={post.media_url} className="w-full object-cover max-h-96" controls />
           ) : (
@@ -564,26 +566,26 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
         </div>
       )}
 
-      <div className="flex items-center gap-6 pt-4 border-t border-white/5">
-        <button onClick={handleLike} className="flex items-center gap-2 text-white/40 hover:text-brand transition-all group">
+      <div className="flex items-center gap-6 pt-4 border-t border-black/5">
+        <button onClick={handleLike} className="flex items-center gap-2 text-black/40 hover:text-brand transition-all group">
           <div className="p-2 rounded-xl group-hover:bg-brand/10 transition-all">
             <Heart size={20} />
           </div>
           <span className="text-xs font-bold">{post.likes_count}</span>
         </button>
-        <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-white/40 hover:text-blue-400 transition-all group">
+        <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-black/40 hover:text-blue-400 transition-all group">
           <div className="p-2 rounded-xl group-hover:bg-blue-400/10 transition-all">
             <MessageCircle size={20} />
           </div>
           <span className="text-xs font-bold">{post.comments_count}</span>
         </button>
-        <div className="flex items-center gap-2 text-white/20">
+        <div className="flex items-center gap-2 text-black/20">
           <div className="p-2">
             <Search size={16} />
           </div>
           <span className="text-[10px] font-black">{post.views_count || 0}</span>
         </div>
-        <button onClick={handleRepost} className="flex items-center gap-2 text-white/40 hover:text-green-400 transition-all group ml-auto">
+        <button onClick={handleRepost} className="flex items-center gap-2 text-black/40 hover:text-green-400 transition-all group ml-auto">
           <div className="p-2 rounded-xl group-hover:bg-green-400/10 transition-all">
             <Share2 size={20} />
           </div>
@@ -614,12 +616,12 @@ const PostCard = ({ post, user, onUpdate }: { post: any, user: UserData, onUpdat
             <div className="space-y-3">
               {comments.map(c => (
                 <div key={c.id} className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/10">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-black/10">
                     <img src={c.user_photos ? JSON.parse(c.user_photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.username}`} alt="" />
                   </div>
-                  <div className="flex-1 bg-white/5 p-3 rounded-2xl">
+                  <div className="flex-1 bg-black/5 p-3 rounded-2xl">
                     <p className="text-xs font-bold mb-1">@{c.username}</p>
-                    <p className="text-xs text-white/80">{c.content}</p>
+                    <p className="text-xs text-black/80">{c.content}</p>
                   </div>
                 </div>
               ))}
@@ -659,17 +661,17 @@ const SuggestedFriends = ({ user, onFollow }: { user: UserData, onFollow: () => 
 
   return (
     <div className="glass p-6 rounded-[2rem] space-y-4">
-      <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Suggested for you</h3>
+      <h3 className="text-xs font-black uppercase tracking-widest text-black/40">Suggested for you</h3>
       <div className="space-y-4">
         {suggested.map(s => (
           <div key={s.id} className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-black/10">
                 <img src={s.photos ? JSON.parse(s.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.username}`} alt="" />
               </div>
               <div>
                 <p className="text-sm font-bold">{s.full_name}</p>
-                <p className="text-[10px] text-white/40">@{s.username}</p>
+                <p className="text-[10px] text-black/40">@{s.username}</p>
               </div>
             </div>
             <button 
@@ -750,7 +752,7 @@ const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: ()
         {/* Create Post */}
       <div className="glass p-4 sm:p-6 rounded-2xl sm:rounded-[2rem]">
         <div className="flex gap-4 mb-4">
-          <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+          <div className="w-12 h-12 rounded-2xl overflow-hidden border border-black/10 shrink-0">
             <img 
               src={user.photos ? JSON.parse(user.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} 
               alt="Me" 
@@ -773,7 +775,7 @@ const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: ()
         </div>
 
         {mediaUrl && (
-          <div className="relative mb-4 rounded-2xl overflow-hidden border border-white/10 aspect-video bg-black/20">
+          <div className="relative mb-4 rounded-2xl overflow-hidden border border-black/10 aspect-video bg-black/5">
             {mediaUrl.endsWith('.mp4') ? (
               <video src={mediaUrl} className="w-full h-full object-cover" controls />
             ) : (
@@ -788,7 +790,7 @@ const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: ()
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+        <div className="flex items-center justify-between pt-4 border-t border-black/5">
           <div className="flex items-center gap-2">
             <input 
               type="file" 
@@ -800,17 +802,17 @@ const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: ()
             <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="p-2 rounded-xl hover:bg-white/5 text-white/40 hover:text-white transition-all disabled:opacity-50"
+              className="p-2 rounded-xl hover:bg-black/5 text-black/40 hover:text-black transition-all disabled:opacity-50"
             >
               <ImageIcon size={20} />
             </button>
             <select 
-              className="bg-transparent text-white/40 text-[10px] font-black uppercase tracking-widest focus:outline-none cursor-pointer hover:text-white transition-all"
+              className="bg-transparent text-black/40 text-[10px] font-black uppercase tracking-widest focus:outline-none cursor-pointer hover:text-black transition-all"
               value={postType}
               onChange={e => setPostType(e.target.value as 'post' | 'reel')}
             >
-              <option value="post" className="bg-zinc-900">Post</option>
-              <option value="reel" className="bg-zinc-900">Reel</option>
+              <option value="post" className="bg-white text-black">Post</option>
+              <option value="reel" className="bg-white text-black">Reel</option>
             </select>
           </div>
           <button 
@@ -827,19 +829,20 @@ const FeedView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: ()
       <AnimatePresence>
         {posts.map((post, idx) => (
           <PostCard key={post.id} post={post} user={user} onUpdate={fetchPosts} />
-        </AnimatePresence>
-      </div>
+        ))}
+      </AnimatePresence>
+    </div>
 
       {/* Sidebar */}
       <div className="hidden lg:block space-y-6">
         <SuggestedFriends user={user} onFollow={onFollowUpdate} />
         <div className="glass p-6 rounded-[2rem] space-y-4">
-          <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Trending Topics</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-black/40">Trending Topics</h3>
           <div className="space-y-2">
             {['#STYN', '#Social', '#Dating', '#Reels'].map(tag => (
-              <div key={tag} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 cursor-pointer transition-all">
+              <div key={tag} className="flex items-center justify-between p-3 rounded-xl hover:bg-black/5 cursor-pointer transition-all">
                 <span className="text-sm font-bold">{tag}</span>
-                <span className="text-[10px] text-white/40">1.2k posts</span>
+                <span className="text-[10px] text-black/40">1.2k posts</span>
               </div>
             ))}
           </div>
@@ -882,11 +885,11 @@ const DatingView = ({ user }: { user: UserData }) => {
     return (
       <div className="h-screen flex items-center justify-center p-8 text-center">
         <div className="space-y-4">
-          <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto">
-            <Search className="text-white/20" size={40} />
+          <div className="w-20 h-20 bg-black/5 rounded-full flex items-center justify-center mx-auto">
+            <Search className="text-black/20" size={40} />
           </div>
           <h2 className="text-2xl font-black">No more profiles nearby</h2>
-          <p className="text-white/40">Try expanding your filters or check back later!</p>
+          <p className="text-black/40">Try expanding your filters or check back later!</p>
         </div>
       </div>
     );
@@ -898,12 +901,12 @@ const DatingView = ({ user }: { user: UserData }) => {
     <div className="h-screen pt-24 pb-32 px-4 flex flex-col items-center justify-center overflow-hidden">
       <div className="relative w-full max-w-md aspect-[3/4] group">
         <AnimatePresence mode="wait">
-          <motion.div 
+            <motion.div 
             key={currentProfile.id}
             initial={{ scale: 0.9, opacity: 0, x: 50 }}
             animate={{ scale: 1, opacity: 1, x: 0 }}
             exit={{ scale: 0.9, opacity: 0, x: -50 }}
-            className="absolute inset-0 rounded-[3rem] overflow-hidden shadow-2xl border border-white/10"
+            className="absolute inset-0 rounded-[3rem] overflow-hidden shadow-2xl border border-black/10"
           >
             <img 
               src={currentProfile.photos ? JSON.parse(currentProfile.photos)[0] : `https://picsum.photos/seed/${currentProfile.username}/800/1200`} 
@@ -911,24 +914,24 @@ const DatingView = ({ user }: { user: UserData }) => {
               className="w-full h-full object-cover"
             />
             
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
             
             <div className="absolute bottom-0 left-0 right-0 p-8 space-y-2">
               <div className="flex items-center gap-2">
-                <h2 className="text-4xl font-black tracking-tighter">{currentProfile.full_name}, {currentProfile.age}</h2>
+                <h2 className="text-4xl font-black tracking-tighter text-white">{currentProfile.full_name}, {currentProfile.age}</h2>
                 <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                   <Check size={14} className="text-white" />
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-white/60 text-sm font-bold uppercase tracking-widest">
+              <div className="flex items-center gap-2 text-white/80 text-sm font-bold uppercase tracking-widest">
                 <Zap size={14} className="text-brand fill-brand" />
                 <span>87% Compatibility</span>
               </div>
-              <p className="text-white/60 line-clamp-2 text-sm">{currentProfile.bio || 'No bio provided.'}</p>
+              <p className="text-white/80 line-clamp-2 text-sm">{currentProfile.bio || 'No bio provided.'}</p>
               
               <div className="flex gap-2 pt-4">
                 {['Travel', 'Music', 'Tech'].map(tag => (
-                  <span key={tag} className="px-3 py-1 rounded-full bg-white/10 text-[10px] font-bold uppercase tracking-widest">{tag}</span>
+                  <span key={tag} className="px-3 py-1 rounded-full bg-white/20 text-[10px] font-bold uppercase tracking-widest text-white">{tag}</span>
                 ))}
               </div>
             </div>
@@ -939,13 +942,13 @@ const DatingView = ({ user }: { user: UserData }) => {
       <div className="flex items-center gap-6 mt-8">
         <button 
           onClick={() => handleSwipe('left')}
-          className="w-16 h-16 rounded-full glass flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all hover:scale-110 active:scale-90"
+          className="w-16 h-16 rounded-full glass flex items-center justify-center text-black/40 hover:text-black hover:bg-black/10 transition-all hover:scale-110 active:scale-90"
         >
           <X size={32} />
         </button>
         <button 
           onClick={() => handleSwipe('super')}
-          className="w-14 h-14 rounded-full glass flex items-center justify-center text-blue-400 hover:bg-blue-400/10 transition-all hover:scale-110 active:scale-90"
+          className="w-14 h-14 rounded-full glass flex items-center justify-center text-blue-500 hover:bg-blue-500/10 transition-all hover:scale-110 active:scale-90"
         >
           <Star size={24} fill="currentColor" />
         </button>
@@ -1002,14 +1005,14 @@ const ChatView = ({ user }: { user: UserData }) => {
     <div className="h-screen pt-24 pb-32 px-4 flex gap-6 max-w-6xl mx-auto">
       {/* Sidebar */}
       <div className="w-80 glass rounded-[2.5rem] overflow-hidden flex flex-col shrink-0">
-        <div className="p-6 border-b border-white/5">
+        <div className="p-6 border-b border-black/5">
           <h2 className="text-2xl font-black tracking-tighter mb-4">Messages</h2>
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20" size={18} />
             <input 
               type="text" 
               placeholder="Search matches..." 
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-2 text-sm focus:outline-none focus:border-brand/50"
+              className="w-full bg-black/5 border border-black/10 rounded-xl pl-12 pr-4 py-2 text-sm focus:outline-none focus:border-brand/50"
             />
           </div>
         </div>
@@ -1021,16 +1024,16 @@ const ChatView = ({ user }: { user: UserData }) => {
               onClick={() => setActiveChat(match)}
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-2xl transition-all",
-                activeChat?.id === match.id ? "bg-brand/10 border border-brand/20" : "hover:bg-white/5"
+                activeChat?.id === match.id ? "bg-brand/10 border border-brand/20" : "hover:bg-black/5"
               )}
             >
-              <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 relative">
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.username}`} alt={match.username} />
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0A0A0A]" />
+              <div className="w-12 h-12 rounded-xl overflow-hidden border border-black/10 relative">
+                <img src={match.photos ? JSON.parse(match.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${match.username}`} alt={match.username} />
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#F8F9FA]" />
               </div>
               <div className="text-left">
                 <h4 className="font-bold text-sm">@{match.username}</h4>
-                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Online Now</p>
+                <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Online Now</p>
               </div>
             </button>
           ))}
@@ -1041,10 +1044,10 @@ const ChatView = ({ user }: { user: UserData }) => {
       <div className="flex-1 glass rounded-[2.5rem] overflow-hidden flex flex-col">
         {activeChat ? (
           <>
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+            <div className="p-6 border-b border-black/5 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${activeChat.username}`} alt={activeChat.username} />
+                <div className="w-12 h-12 rounded-xl overflow-hidden border border-black/10">
+                  <img src={activeChat.photos ? JSON.parse(activeChat.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeChat.username}`} alt={activeChat.username} />
                 </div>
                 <div>
                   <h3 className="font-black tracking-tight">{activeChat.full_name}</h3>
@@ -1052,8 +1055,8 @@ const ChatView = ({ user }: { user: UserData }) => {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="p-3 rounded-xl hover:bg-white/5 text-white/40 transition-all"><Video size={20} /></button>
-                <button className="p-3 rounded-xl hover:bg-white/5 text-white/40 transition-all"><Mic size={20} /></button>
+                <button className="p-3 rounded-xl hover:bg-black/5 text-black/40 transition-all"><Video size={20} /></button>
+                <button className="p-3 rounded-xl hover:bg-black/5 text-black/40 transition-all"><Mic size={20} /></button>
               </div>
             </div>
 
@@ -1062,7 +1065,7 @@ const ChatView = ({ user }: { user: UserData }) => {
                 <div key={i} className={cn("flex", msg.sender_id === user.id ? "justify-end" : "justify-start")}>
                   <div className={cn(
                     "max-w-[70%] p-4 rounded-2xl text-sm",
-                    msg.sender_id === user.id ? "bg-brand text-white rounded-tr-none" : "bg-white/10 text-white rounded-tl-none"
+                    msg.sender_id === user.id ? "bg-brand text-white rounded-tr-none" : "bg-black/5 text-black rounded-tl-none border border-black/5"
                   )}>
                     {msg.text}
                   </div>
@@ -1070,13 +1073,13 @@ const ChatView = ({ user }: { user: UserData }) => {
               ))}
             </div>
 
-            <div className="p-6 border-t border-white/5">
+            <div className="p-6 border-t border-black/5">
               <div className="flex gap-4 items-center">
-                <button className="text-white/20 hover:text-white transition-all"><PlusSquare size={24} /></button>
+                <button className="text-black/20 hover:text-black transition-all"><PlusSquare size={24} /></button>
                 <input 
                   type="text" 
                   placeholder="Type a message..." 
-                  className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 focus:outline-none focus:border-brand/50"
+                  className="flex-1 bg-black/5 border border-black/10 rounded-2xl px-6 py-3 focus:outline-none focus:border-brand/50"
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && sendMessage()}
@@ -1092,11 +1095,11 @@ const ChatView = ({ user }: { user: UserData }) => {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-            <div className="w-24 h-24 bg-white/5 rounded-[2rem] flex items-center justify-center mb-6">
-              <MessageCircle className="text-white/10" size={48} />
+            <div className="w-24 h-24 bg-black/5 rounded-[2rem] flex items-center justify-center mb-6">
+              <MessageCircle className="text-black/10" size={48} />
             </div>
             <h2 className="text-3xl font-black tracking-tighter mb-2">Your Conversations</h2>
-            <p className="text-white/40 max-w-xs">Select a match from the sidebar to start chatting and making connections.</p>
+            <p className="text-black/40 max-w-xs">Select a match from the sidebar to start chatting and making connections.</p>
           </div>
         )}
       </div>
@@ -1135,9 +1138,9 @@ const WithdrawalModal = ({ user, onClose, onUpdate }: { user: UserData, onClose:
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass w-full max-w-md p-8 rounded-[2.5rem] space-y-6 relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-white/40 hover:text-white"><X size={24} /></button>
+        <button onClick={onClose} className="absolute top-6 right-6 text-black/40 hover:text-black"><X size={24} /></button>
         <h2 className="text-3xl font-black tracking-tighter">Withdraw Funds</h2>
         <div className="space-y-4">
           <div className="p-4 bg-brand/10 rounded-2xl border border-brand/20">
@@ -1145,19 +1148,19 @@ const WithdrawalModal = ({ user, onClose, onUpdate }: { user: UserData, onClose:
             <p className="text-2xl font-black">${user.balance.toFixed(2)}</p>
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Amount ($)</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-black/40 ml-2">Amount ($)</label>
             <input type="number" className="input-glass w-full" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Method</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-black/40 ml-2">Method</label>
             <select className="input-glass w-full" value={method} onChange={e => setMethod(e.target.value)}>
-              <option>Bank Transfer</option>
-              <option>PayPal</option>
-              <option>Crypto</option>
+              <option className="bg-white text-black">Bank Transfer</option>
+              <option className="bg-white text-black">PayPal</option>
+              <option className="bg-white text-black">Crypto</option>
             </select>
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Details (Acc No / Email)</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-black/40 ml-2">Details (Acc No / Email)</label>
             <input className="input-glass w-full" value={details} onChange={e => setDetails(e.target.value)} placeholder="Enter details..." />
           </div>
         </div>
@@ -1307,23 +1310,23 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                   </div>
                 )}
               </div>
-              <p className="text-white/40 font-bold uppercase tracking-[0.2em] text-xs mb-4">@{user.username}</p>
+              <p className="text-black/40 font-bold uppercase tracking-[0.2em] text-xs mb-4">@{user.username}</p>
               <div className="flex flex-wrap justify-center sm:justify-start gap-6">
                 <div className="flex flex-col items-center sm:items-start">
                   <span className="text-xl font-black">{user.followers_count}</span>
-                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Followers</span>
+                  <span className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Followers</span>
                 </div>
                 <div className="flex flex-col items-center sm:items-start">
                   <span className="text-xl font-black">{user.following_count}</span>
-                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Following</span>
+                  <span className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Following</span>
                 </div>
                 <div className="flex flex-col items-center sm:items-start">
                   <span className="text-xl font-black text-brand">{user.points}</span>
-                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Points (${(user.points * POINTS_TO_MONEY_RATE).toFixed(2)})</span>
+                  <span className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Points (${(user.points * POINTS_TO_MONEY_RATE).toFixed(2)})</span>
                 </div>
                 <div className="flex flex-col items-center sm:items-start">
-                  <span className="text-xl font-black text-green-400">${user.balance.toFixed(2)}</span>
-                  <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Balance</span>
+                  <span className="text-xl font-black text-green-600">${user.balance.toFixed(2)}</span>
+                  <span className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Balance</span>
                 </div>
               </div>
             </div>
@@ -1341,7 +1344,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                 ) : (
                   <button 
                     onClick={() => setIsEditing(true)}
-                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all flex items-center gap-2"
+                    className="bg-black/5 hover:bg-black/10 text-black px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all flex items-center gap-2"
                   >
                     <Settings size={16} />
                     Edit
@@ -1362,13 +1365,13 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
             </div>
           </div>
 
-          <div className="h-px bg-white/5 mb-8" />
+          <div className="h-px bg-black/5 mb-8" />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Intro */}
             <div className="space-y-6">
               <div className="glass p-6 rounded-3xl space-y-4">
-                <h3 className="font-black uppercase tracking-widest text-xs text-white/40">Intro</h3>
+                <h3 className="font-black uppercase tracking-widest text-xs text-black/40">Intro</h3>
                 {isEditing ? (
                   <div className="space-y-4">
                     <textarea 
@@ -1382,19 +1385,19 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                       value={editData.relationship_status}
                       onChange={e => setEditData({...editData, relationship_status: e.target.value})}
                     >
-                      {RELATIONSHIP_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      {RELATIONSHIP_STATUSES.map(s => <option key={s} value={s} className="bg-white text-black">{s}</option>)}
                     </select>
                   </div>
                 ) : (
-                  <p className="text-sm text-white/80 leading-relaxed">{user.bio || "No bio yet."}</p>
+                  <p className="text-sm text-black/80 leading-relaxed">{user.bio || "No bio yet."}</p>
                 )}
                 
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center gap-3 text-sm text-white/60">
+                  <div className="flex items-center gap-3 text-sm text-black/60">
                     <Heart size={16} className="text-brand" />
                     <span>{user.relationship_status || "Single"}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-white/60">
+                  <div className="flex items-center gap-3 text-sm text-black/60">
                     <MapPin size={16} className="text-brand" />
                     {isEditing ? (
                       <select 
@@ -1402,14 +1405,14 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                         value={editData.location}
                         onChange={e => setEditData({...editData, location: e.target.value})}
                       >
-                        <option value="">Select Location</option>
-                        {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                        <option value="" className="bg-white text-black">Select Location</option>
+                        {LOCATIONS.map(l => <option key={l} value={l} className="bg-white text-black">{l}</option>)}
                       </select>
                     ) : (
                       <span>{user.location || "Earth"}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-white/60">
+                  <div className="flex items-center gap-3 text-sm text-black/60">
                     <Trophy size={16} className="text-brand" />
                     <div className={cn("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-gradient-to-r", getLevelColor(user.level))}>
                       {getLevelName(user.level)} Level {user.level}
@@ -1419,28 +1422,29 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
               </div>
 
               <div className="glass p-6 rounded-3xl space-y-4">
-                <h3 className="font-black uppercase tracking-widest text-xs text-white/40">Verification</h3>
+                <h3 className="font-black uppercase tracking-widest text-xs text-black/40">Verification</h3>
                 {user.verification_status === 'verified' ? (
-                  <div className="flex items-center gap-2 text-blue-400">
+                  <div className="flex items-center gap-2 text-blue-500">
                     <ShieldCheck size={16} />
                     <span className="text-xs font-bold uppercase tracking-widest">Verified Account</span>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-[10px] text-white/40 font-bold leading-relaxed">Verify your account to get a badge and earn more points.</p>
+                    <p className="text-[10px] text-black/40 font-bold leading-relaxed">Verify your account to get a badge and earn more points.</p>
                     <div className="grid grid-cols-2 gap-2">
                       <button 
                         onClick={async () => {
                           await fetch('/api/verify/pay', { method: 'POST', headers: { 'Authorization': `Bearer ${user.token}` } });
                           onUpdate();
                         }}
-                        className="bg-brand/10 hover:bg-brand/20 text-brand py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                        className="bg-[#0070ba] hover:bg-[#003087] text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                       >
+                        <CreditCard size={14} />
                         Pay $5.00
                       </button>
                       <button 
                         onClick={() => idInputRef.current?.click()}
-                        className="bg-white/5 hover:bg-white/10 text-white/60 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                        className="bg-black/5 hover:bg-black/10 text-black/60 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
                       >
                         Upload ID
                       </button>
@@ -1468,7 +1472,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
 
               <div className="glass p-6 rounded-3xl">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black uppercase tracking-widest text-xs text-white/40">Interests</h3>
+                  <h3 className="font-black uppercase tracking-widest text-xs text-black/40">Interests</h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {INTERESTS_LIST.map(interest => (
@@ -1486,7 +1490,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                         "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
                         (editData.interests?.split(',') || []).includes(interest)
                           ? "bg-brand text-white"
-                          : "bg-white/5 text-white/40 hover:bg-white/10"
+                          : "bg-black/5 text-black/40 hover:bg-black/10"
                       )}
                     >
                       {interest}
@@ -1497,12 +1501,12 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
 
               <div className="glass p-6 rounded-3xl">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black uppercase tracking-widest text-xs text-white/40">Photos</h3>
+                  <h3 className="font-black uppercase tracking-widest text-xs text-black/40">Photos</h3>
                   <button className="text-brand text-[10px] font-black uppercase tracking-widest hover:underline">See All</button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[1,2,3,4,5,6].map(i => (
-                    <div key={i} className="aspect-square rounded-xl overflow-hidden bg-white/5">
+                    <div key={i} className="aspect-square rounded-xl overflow-hidden bg-black/5">
                       <img src={`https://picsum.photos/seed/user-photo-${i}/200`} className="w-full h-full object-cover" alt="" />
                     </div>
                   ))}
@@ -1519,7 +1523,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                     onClick={() => setActiveTab(tab)}
                     className={cn(
                       "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                      activeTab === tab ? "bg-brand text-white shadow-lg shadow-brand/20" : "text-white/40 hover:text-white hover:bg-white/5"
+                      activeTab === tab ? "bg-brand text-white shadow-lg shadow-brand/20" : "text-black/40 hover:text-black hover:bg-black/5"
                     )}
                   >
                     {tab}
@@ -1531,14 +1535,14 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {friends.map(friend => (
                     <div key={friend.id} className="glass p-4 rounded-3xl flex flex-col items-center text-center space-y-3">
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-black/10">
                         <img src={friend.photos ? JSON.parse(friend.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`} className="w-full h-full object-cover" alt="" />
                       </div>
                       <div>
                         <p className="text-sm font-black tracking-tight truncate w-full">{friend.full_name}</p>
-                        <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">@{friend.username}</p>
+                        <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">@{friend.username}</p>
                       </div>
-                      <button className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all">View Profile</button>
+                      <button className="w-full py-2 rounded-xl bg-black/5 hover:bg-black/10 text-[10px] font-black uppercase tracking-widest transition-all">View Profile</button>
                     </div>
                   ))}
                 </div>
@@ -1547,7 +1551,7 @@ const ProfileView = ({ user, onLogout, onUpdate }: { user: UserData, onLogout: (
               {activeTab === 'posts' && (
                 <div className="space-y-6">
                   <div className="glass p-6 rounded-3xl text-center py-12">
-                    <p className="text-white/20 text-sm font-bold uppercase tracking-widest">No posts to show</p>
+                    <p className="text-black/20 text-sm font-bold uppercase tracking-widest">No posts to show</p>
                   </div>
                 </div>
               )}
@@ -1603,7 +1607,7 @@ const MarketView = ({ user }: { user: UserData }) => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-4xl font-black tracking-tighter mb-2">Marketplace</h1>
-          <p className="text-white/40 font-bold uppercase tracking-widest text-xs">Buy and sell within the community</p>
+          <p className="text-black/40 font-bold uppercase tracking-widest text-xs">Buy and sell within the community</p>
         </div>
         <button 
           onClick={() => setShowAdd(true)}
@@ -1620,9 +1624,9 @@ const MarketView = ({ user }: { user: UserData }) => {
             key={product.id}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="glass rounded-3xl overflow-hidden group border border-white/5 hover:border-brand/30 transition-all"
+            className="glass rounded-3xl overflow-hidden group border border-black/5 hover:border-brand/30 transition-all"
           >
-            <div className="aspect-square bg-white/5 relative">
+            <div className="aspect-square bg-black/5 relative">
               <img src={product.image_url || `https://picsum.photos/seed/${product.id}/400`} className="w-full h-full object-cover" alt="" />
               <div className="absolute top-4 right-4 bg-brand text-white px-3 py-1 rounded-xl text-sm font-black shadow-lg">
                 ${product.price}
@@ -1631,11 +1635,11 @@ const MarketView = ({ user }: { user: UserData }) => {
             <div className="p-6 space-y-4">
               <div>
                 <h3 className="font-black text-lg mb-1">{product.name}</h3>
-                <p className="text-xs text-white/40 font-bold uppercase tracking-widest">{product.category}</p>
+                <p className="text-xs text-black/40 font-bold uppercase tracking-widest">{product.category}</p>
               </div>
-              <p className="text-sm text-white/60 line-clamp-2">{product.description}</p>
+              <p className="text-sm text-black/60 line-clamp-2">{product.description}</p>
               <div className="flex gap-2 pt-2">
-                <button className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
+                <button className="flex-1 bg-black/5 hover:bg-black/10 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
                   View Details
                 </button>
                 <button 
@@ -1652,7 +1656,7 @@ const MarketView = ({ user }: { user: UserData }) => {
 
       <AnimatePresence>
         {showAdd && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1661,7 +1665,7 @@ const MarketView = ({ user }: { user: UserData }) => {
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-black tracking-tighter">List New Product</h2>
-                <button onClick={() => setShowAdd(false)} className="p-2 rounded-full hover:bg-white/5"><X size={24} /></button>
+                <button onClick={() => setShowAdd(false)} className="p-2 rounded-full hover:bg-black/5"><X size={24} /></button>
               </div>
 
               <div className="space-y-4">
@@ -1689,17 +1693,17 @@ const MarketView = ({ user }: { user: UserData }) => {
                   value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})}
                 />
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-2">Product Image</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-black/40 ml-2">Product Image</label>
                   <div 
                     onClick={() => document.getElementById('product-upload')?.click()}
-                    className="w-full h-32 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-brand/50 transition-all cursor-pointer bg-white/5"
+                    className="w-full h-32 border-2 border-dashed border-black/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-brand/50 transition-all cursor-pointer bg-black/5"
                   >
                     {newProduct.image_url ? (
                       <img src={newProduct.image_url} className="w-full h-full object-cover rounded-2xl" alt="" />
                     ) : (
                       <>
-                        <Upload size={24} className="text-white/20" />
-                        <span className="text-xs text-white/40 font-bold">Click to upload photo</span>
+                        <Upload size={24} className="text-black/20" />
+                        <span className="text-xs text-black/40 font-bold">Click to upload photo</span>
                       </>
                     )}
                   </div>
@@ -1770,8 +1774,8 @@ const ReelsView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: (
   };
 
   return (
-    <div className="h-screen bg-black flex items-center justify-center">
-      <div className="h-full max-h-[900px] aspect-[9/16] relative bg-zinc-900 rounded-[3rem] overflow-hidden shadow-2xl border border-white/5">
+    <div className="h-screen bg-[#F8F9FA] flex items-center justify-center">
+      <div className="h-full max-h-[900px] aspect-[9/16] relative bg-black rounded-[3rem] overflow-hidden shadow-2xl border border-black/10">
         {reels.length > 0 ? (
           <div className="h-full w-full relative">
             <video 
@@ -1820,15 +1824,15 @@ const ReelsView = ({ user, onFollowUpdate }: { user: UserData, onFollowUpdate: (
             </div>
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-white/20">
+          <div className="h-full flex items-center justify-center text-black/20">
             <PlayCircle size={64} />
           </div>
         )}
       </div>
       
       <div className="fixed right-12 top-1/2 -translate-y-1/2 flex flex-col gap-4">
-        <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} className="p-4 rounded-full glass hover:bg-white/10 transition-all"><ChevronLeft className="rotate-90" /></button>
-        <button onClick={() => setCurrentIndex(prev => Math.min(reels.length - 1, prev + 1))} className="p-4 rounded-full glass hover:bg-white/10 transition-all"><ChevronRight className="rotate-90" /></button>
+        <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} className="p-4 rounded-full glass hover:bg-black/10 transition-all text-black"><ChevronLeft className="rotate-90" /></button>
+        <button onClick={() => setCurrentIndex(prev => Math.min(reels.length - 1, prev + 1))} className="p-4 rounded-full glass hover:bg-black/10 transition-all text-black"><ChevronRight className="rotate-90" /></button>
       </div>
     </div>
   );
@@ -1904,7 +1908,7 @@ const AdminView = ({ user }: { user: UserData }) => {
               onClick={() => setActiveTab(tab)}
               className={cn(
                 "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                activeTab === tab ? "bg-brand text-white" : "text-white/40 hover:text-white"
+                activeTab === tab ? "bg-brand text-white" : "text-black/40 hover:text-black"
               )}
             >
               {tab}
@@ -1928,7 +1932,7 @@ const AdminView = ({ user }: { user: UserData }) => {
                 </div>
                 <div>
                   <p className="text-3xl font-black tracking-tighter">{stat.value || 0}</p>
-                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{stat.label}</p>
+                  <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">{stat.label}</p>
                 </div>
               </div>
             ))}
@@ -1941,7 +1945,7 @@ const AdminView = ({ user }: { user: UserData }) => {
                 {stats.postStats.map((s: any) => (
                   <div key={s.type} className="flex flex-col">
                     <span className="text-2xl font-black">{s.count}</span>
-                    <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{s.type}s</span>
+                    <span className="text-[10px] text-black/40 font-bold uppercase tracking-widest">{s.type}s</span>
                   </div>
                 ))}
               </div>
@@ -1956,7 +1960,7 @@ const AdminView = ({ user }: { user: UserData }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {settings.map((s, idx) => (
               <div key={s.key} className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-white/40">{s.key.replace(/_/g, ' ')}</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-black/40">{s.key.replace(/_/g, ' ')}</label>
                 <input 
                   type="text" 
                   className="input-glass w-full" 
@@ -1977,17 +1981,17 @@ const AdminView = ({ user }: { user: UserData }) => {
       )}
       {activeTab === 'users' && (
         <div className="glass rounded-[2.5rem] overflow-hidden">
-          <div className="p-8 border-b border-white/5 flex items-center justify-between">
+          <div className="p-8 border-b border-black/5 flex items-center justify-between">
             <h2 className="text-xl font-black tracking-tighter">User Management</h2>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-              <input type="text" placeholder="Search users..." className="bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-2 text-sm" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20" size={18} />
+              <input type="text" placeholder="Search users..." className="bg-black/5 border border-black/10 rounded-xl pl-12 pr-4 py-2 text-sm" />
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 border-b border-white/5">
+                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-black/20 border-b border-black/5">
                   <th className="px-8 py-6">User</th>
                   <th className="px-8 py-6">Status</th>
                   <th className="px-8 py-6">Level/Points</th>
@@ -1995,39 +1999,39 @@ const AdminView = ({ user }: { user: UserData }) => {
                   <th className="px-8 py-6">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-black/5">
                 {users.map(u => (
-                  <tr key={u.id} className="hover:bg-white/5 transition-all">
+                  <tr key={u.id} className="hover:bg-black/5 transition-all">
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
-                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`} alt="" />
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-black/10">
+                          <img src={u.photos ? JSON.parse(u.photos)[0] : `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`} alt="" />
                         </div>
                         <div>
                           <p className="font-bold text-sm">{u.full_name}</p>
-                          <p className="text-xs text-white/40">@{u.username}</p>
+                          <p className="text-xs text-black/40">@{u.username}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-8 py-6">
                       <span className={cn(
                         "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                        u.verification_status === 'verified' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : "bg-white/5 text-white/40 border-white/10"
+                        u.verification_status === 'verified' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : "bg-black/5 text-black/40 border-black/10"
                       )}>
                         {u.verification_status}
                       </span>
                     </td>
                     <td className="px-8 py-6">
                       <p className="text-sm font-bold">Lvl {u.level}</p>
-                      <p className="text-xs text-white/40">{u.points} pts</p>
+                      <p className="text-xs text-black/40">{u.points} pts</p>
                     </td>
-                    <td className="px-8 py-6 text-xs text-white/40">
+                    <td className="px-8 py-6 text-xs text-black/40">
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-8 py-6">
                       <button 
                         onClick={() => setEditingUser(u)}
-                        className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-all"
+                        className="p-2 rounded-lg hover:bg-black/5 text-black/40 hover:text-black transition-all"
                       >
                         <Settings size={18} />
                       </button>
@@ -2042,13 +2046,13 @@ const AdminView = ({ user }: { user: UserData }) => {
 
       {activeTab === 'withdrawals' && (
         <div className="glass rounded-[2.5rem] overflow-hidden">
-          <div className="p-8 border-b border-white/5">
+          <div className="p-8 border-b border-black/5">
             <h2 className="text-xl font-black tracking-tighter">Withdrawal Requests</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 border-b border-white/5">
+                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-black/20 border-b border-black/5">
                   <th className="px-8 py-6">User ID</th>
                   <th className="px-8 py-6">Amount</th>
                   <th className="px-8 py-6">Method</th>
@@ -2056,11 +2060,11 @@ const AdminView = ({ user }: { user: UserData }) => {
                   <th className="px-8 py-6">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-black/5">
                 {withdrawals.map(w => (
-                  <tr key={w.id} className="hover:bg-white/5 transition-all">
+                  <tr key={w.id} className="hover:bg-black/5 transition-all">
                     <td className="px-8 py-6 font-bold text-sm">#{w.user_id}</td>
-                    <td className="px-8 py-6 font-black text-green-400">${w.amount}</td>
+                    <td className="px-8 py-6 font-black text-green-600">${w.amount}</td>
                     <td className="px-8 py-6 text-xs font-bold">{w.method}</td>
                    <td className="px-8 py-6">
                       <span className={cn(
@@ -2093,7 +2097,7 @@ const AdminView = ({ user }: { user: UserData }) => {
 
       <AnimatePresence>
         {editingUser && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2206,7 +2210,7 @@ export default function App() {
   if (view === 'auth') return <AuthView onLogin={handleLogin} />;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1B]">
       <Navbar activeView={view} setView={setView} user={user} />
       
       <main className="container mx-auto">
